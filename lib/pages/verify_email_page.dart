@@ -16,27 +16,17 @@ class VerifyEmailPage extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Icon(
-                  Icons.mark_email_read,
-                  size: 80,
-                  color: Colors.blue,
-                ),
+                const Icon(Icons.mark_email_read, size: 80, color: Colors.blue),
                 const SizedBox(height: 24),
                 const Text(
                   'Verify Your Email',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
                 const Text(
                   'We\'ve sent a verification email to your inbox. Please check your email and click the verification link to activate your account.',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey,
-                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
@@ -62,7 +52,10 @@ class VerifyEmailPage extends StatelessWidget {
                       }
                     } catch (error) {
                       if (context.mounted) {
-                        context.showSnackBar('Failed to resend verification email', isError: true);
+                        context.showSnackBar(
+                          'Failed to resend verification email',
+                          isError: true,
+                        );
                       }
                     }
                   },
@@ -76,4 +69,3 @@ class VerifyEmailPage extends StatelessWidget {
     );
   }
 }
-
