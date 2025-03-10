@@ -36,20 +36,24 @@ class _RegisterPageState extends State<RegisterPage> {
     });
 
     try {
-      final response = await supabase.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-        data: {
-          'username': _usernameController.text.trim(),
-        },
-        emailRedirectTo: 'io.supabase.finalapplication://login-callback/',
-      );
+      // Now this code is just only used for routing/navigation
+      Navigator.pushReplacementNamed(context, '/verify-email');
 
-      if (response.user != null) {
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/verify-email');
-        }
-      }
+      // These code will be used for the final application with API
+      // final response = await supabase.auth.signUp(
+      //   email: _emailController.text.trim(),
+      //   password: _passwordController.text,
+      //   data: {
+      //     'username': _usernameController.text.trim(),
+      //   },
+      //   emailRedirectTo: 'io.supabase.finalapplication://login-callback/',
+      // );
+
+      // if (response.user != null) {
+      //   if (mounted) {
+      //     Navigator.pushReplacementNamed(context, '/verify-email');
+      //   }
+      // }
     } on AuthException catch (error) {
       if (mounted) {
         context.showSnackBar(error.message, isError: true);
@@ -70,9 +74,7 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Account'),
-      ),
+      appBar: AppBar(title: const Text('Create Account')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -91,19 +93,13 @@ class _RegisterPageState extends State<RegisterPage> {
                   const SizedBox(height: 24),
                   const Text(
                     'Create Your Account',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   const Text(
                     'Please fill in the details below',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey,
-                    ),
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 32),
@@ -138,7 +134,9 @@ class _RegisterPageState extends State<RegisterPage> {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your email';
                       }
-                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                      if (!RegExp(
+                        r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                      ).hasMatch(value)) {
                         return 'Please enter a valid email';
                       }
                       return null;
@@ -152,7 +150,9 @@ class _RegisterPageState extends State<RegisterPage> {
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
+                          _isPasswordVisible
+                              ? Icons.visibility_off
+                              : Icons.visibility,
                         ),
                         onPressed: () {
                           setState(() {
@@ -192,11 +192,14 @@ class _RegisterPageState extends State<RegisterPage> {
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _isConfirmPasswordVisible ? Icons.visibility_off : Icons.visibility,
+                          _isConfirmPasswordVisible
+                              ? Icons.visibility_off
+                              : Icons.visibility,
                         ),
                         onPressed: () {
                           setState(() {
-                            _isConfirmPasswordVisible = !_isConfirmPasswordVisible;
+                            _isConfirmPasswordVisible =
+                                !_isConfirmPasswordVisible;
                           });
                         },
                       ),
@@ -215,16 +218,17 @@ class _RegisterPageState extends State<RegisterPage> {
                   const SizedBox(height: 32),
                   ElevatedButton(
                     onPressed: _isLoading ? null : _signUp,
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text('Sign Up'),
+                    child:
+                        _isLoading
+                            ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                            : const Text('Sign Up'),
                   ),
                   const SizedBox(height: 24),
                   Row(
@@ -248,4 +252,3 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 }
-
