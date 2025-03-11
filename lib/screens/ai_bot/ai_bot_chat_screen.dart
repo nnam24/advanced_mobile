@@ -1,0 +1,694 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../services/ai_bot_service.dart';
+import '../../models/ai_bot.dart';
+import '../../models/message.dart';
+import '../../widgets/animated_background.dart';
+import '../../widgets/message_bubble.dart';
+import '../../providers/prompt_provider.dart';
+import '../../models/prompt.dart';
+
+class AIBotChatScreen extends StatefulWidget {
+  final AIBot bot;
+
+  const AIBotChatScreen({super.key, required this.bot});
+
+  @override
+  State<AIBotChatScreen> createState() => _AIBotChatScreenState();
+}
+
+class _AIBotChatScreenState extends State<AIBotChatScreen> {
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _focusNode = FocusNode();
+  final List<Message> _messages = [];
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  Future<void> _sendMessage() async {
+    final message = _messageController.text.trim();
+    if (message.isEmpty) return;
+
+    setState(() {
+      _isLoading = true;
+      _messages.add(
+        Message(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          content: message,
+          type: MessageType.user,
+          timestamp: DateTime.now(),
+          tokenCount: message.split(' ').length,
+        ),
+      );
+    });
+
+    _messageController.clear();
+
+    // Scroll to bottom after sending message
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
+
+    try {
+      final aiBotService = Provider.of<AIBotService>(context, listen: false);
+      final response = await aiBotService.askBot(widget.bot.id, message);
+
+      if (mounted) {
+        setState(() {
+          _messages.add(response);
+          _isLoading = false;
+        });
+
+        // Scroll to bottom after receiving response
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToBottom();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _messages.add(
+            Message(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              content: 'Sorry, there was an error processing your request.',
+              type: MessageType.assistant,
+              timestamp: DateTime.now(),
+              tokenCount: message.split(' ').length,
+            ),
+          );
+        });
+      }
+    }
+  }
+
+  void _usePrompt(Prompt prompt) {
+    // Increment usage count
+    final promptProvider = Provider.of<PromptProvider>(context, listen: false);
+    promptProvider.incrementUsageCount(prompt.id);
+
+    // Insert the prompt content into the message input
+    _messageController.text = prompt.content;
+    _messageController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _messageController.text.length));
+
+    // Focus on the text field
+    _focusNode.requestFocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 16,
+              backgroundColor:
+                  Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              child: Icon(
+                Icons.smart_toy,
+                size: 16,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(widget.bot.name),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_awesome),
+            tooltip: 'Prompts',
+            onPressed: () {
+              _showPromptsBottomSheet(context);
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: () {
+              _showBotInfo(context);
+            },
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          const AnimatedBackground(),
+          Column(
+            children: [
+              // Messages
+              Expanded(
+                child: _messages.isEmpty
+                    ? _buildEmptyState()
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _messages.length,
+                        itemBuilder: (context, index) {
+                          final message = _messages[index];
+                          return MessageBubble(
+                            key: ValueKey(message.id),
+                            message: message,
+                          );
+                        },
+                      ),
+              ),
+
+              // Loading indicator
+              if (_isLoading)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceVariant,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Text(
+                        'Thinking...',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Message input
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+                  border: Border(
+                    top: BorderSide(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .outline
+                          .withOpacity(0.2),
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        focusNode: _focusNode,
+                        decoration: InputDecoration(
+                          hintText: 'Type a message...',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide.none,
+                          ),
+                          filled: true,
+                          fillColor:
+                              Theme.of(context).colorScheme.surfaceVariant,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.auto_awesome),
+                            tooltip: 'Browse prompts',
+                            onPressed: () {
+                              _showPromptsBottomSheet(context);
+                            },
+                          ),
+                        ),
+                        maxLines: null,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _sendMessage(),
+                        enabled: !_isLoading,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FloatingActionButton(
+                      onPressed: _isLoading ? null : _sendMessage,
+                      mini: true,
+                      child: const Icon(Icons.send),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPromptsBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.3,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return _PromptSelector(
+              scrollController: scrollController,
+              onSelectPrompt: (prompt) {
+                Navigator.pop(context);
+                _usePrompt(prompt);
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircleAvatar(
+            radius: 40,
+            backgroundColor:
+                Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            child: Icon(
+              Icons.smart_toy,
+              size: 40,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            widget.bot.name,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            widget.bot.description,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              'Start chatting with ${widget.bot.name} by sending a message below.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () {
+              _messageController.text = 'Hello! How can you help me today?';
+            },
+            child: const Text('Try a sample message'),
+          ),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            icon: const Icon(Icons.auto_awesome),
+            label: const Text('Browse prompts'),
+            onPressed: () {
+              _showPromptsBottomSheet(context);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showBotInfo(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(widget.bot.name),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.bot.description,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Instructions:',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceVariant,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  widget.bot.instructions,
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Knowledge Sources: ${widget.bot.knowledgeIds.length}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PromptSelector extends StatefulWidget {
+  final ScrollController scrollController;
+  final Function(Prompt) onSelectPrompt;
+
+  const _PromptSelector({
+    required this.scrollController,
+    required this.onSelectPrompt,
+  });
+
+  @override
+  State<_PromptSelector> createState() => _PromptSelectorState();
+}
+
+class _PromptSelectorState extends State<_PromptSelector>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  String _searchQuery = '';
+  PromptCategory? _selectedCategory;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Handle
+        Container(
+          width: 40,
+          height: 4,
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color:
+                Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+
+        // Header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Row(
+            children: [
+              Icon(
+                Icons.auto_awesome,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Prompt Library',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        ),
+
+        // Search
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            decoration: InputDecoration(
+              hintText: 'Search prompts...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+              filled: true,
+              fillColor: Theme.of(context).colorScheme.surfaceVariant,
+              contentPadding: EdgeInsets.zero,
+            ),
+            onChanged: (value) {
+              setState(() {
+                _searchQuery = value;
+              });
+            },
+          ),
+        ),
+
+        // Tabs
+        TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'All'),
+            Tab(text: 'Favorites'),
+            Tab(text: 'My Prompts'),
+          ],
+        ),
+
+        // Category filters
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              _buildCategoryChip(null, 'All'),
+              ...PromptCategory.values.map((category) => _buildCategoryChip(
+                  category, Prompt.getCategoryName(category))),
+            ],
+          ),
+        ),
+
+        // Prompt list
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              // All prompts
+              _buildPromptList(context,
+                  (promptProvider) => _filterPrompts(promptProvider.prompts)),
+
+              // Favorites
+              _buildPromptList(
+                  context,
+                  (promptProvider) =>
+                      _filterPrompts(promptProvider.favoritePrompts)),
+
+              // My prompts
+              _buildPromptList(
+                  context,
+                  (promptProvider) => _filterPrompts(promptProvider.prompts
+                      .where((p) => p.visibility == PromptVisibility.private)
+                      .toList())),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryChip(PromptCategory? category, String label) {
+    final isSelected = _selectedCategory == category;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        avatar: category != null
+            ? Icon(
+                Prompt.getCategoryIcon(category),
+                size: 18,
+              )
+            : null,
+        onSelected: (selected) {
+          setState(() {
+            _selectedCategory = selected ? category : null;
+          });
+        },
+      ),
+    );
+  }
+
+  List<Prompt> _filterPrompts(List<Prompt> prompts) {
+    return prompts.where((prompt) {
+      // Filter by category
+      if (_selectedCategory != null && prompt.category != _selectedCategory) {
+        return false;
+      }
+
+      // Filter by search query
+      if (_searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase();
+        return prompt.title.toLowerCase().contains(query) ||
+            prompt.content.toLowerCase().contains(query);
+      }
+
+      return true;
+    }).toList();
+  }
+
+  Widget _buildPromptList(
+    BuildContext context,
+    List<Prompt> Function(PromptProvider) promptsSelector,
+  ) {
+    return Consumer<PromptProvider>(
+      builder: (context, promptProvider, child) {
+        final prompts = promptsSelector(promptProvider);
+
+        if (prompts.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No prompts found',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          controller: widget.scrollController,
+          itemCount: prompts.length,
+          itemBuilder: (context, index) {
+            final prompt = prompts[index];
+            return Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primaryContainer,
+                  child: Icon(
+                    Prompt.getCategoryIcon(prompt.category),
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                title: Text(
+                  prompt.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  prompt.content,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (prompt.isFavorite)
+                      Icon(
+                        Icons.favorite,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ElevatedButton(
+                      onPressed: () {
+                        widget.onSelectPrompt(prompt);
+                      },
+                      child: const Text('Use'),
+                    ),
+                  ],
+                ),
+                onTap: () {
+                  widget.onSelectPrompt(prompt);
+                },
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
