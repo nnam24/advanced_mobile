@@ -70,9 +70,3 @@ Watch our application in action:
   </a>
   <p><em>Click to watch the demo on YouTube</em></p>
 </div>
-
-## 🚀 Getting Started
-
-1. Clone the repository
-   ```bash
-   git clone https://github.com/yourusername/jarvis-ai.git
