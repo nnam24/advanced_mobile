@@ -6,6 +6,7 @@ import '../../widgets/animated_background.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 import '../../screens/home_screen.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -398,7 +399,8 @@ class _LoginScreenState extends State<LoginScreen>
     VoidCallback onPressed,
   ) {
     // Since we don't have actual assets, we'll use icons instead
-    IconData iconData = label == 'Google' ? Icons.g_mobiledata : Icons.apple;
+    IconData iconData =
+        label == 'Google' ? FontAwesomeIcons.google : Icons.apple;
 
     return Expanded(
       child: OutlinedButton(
@@ -419,7 +421,7 @@ class _LoginScreenState extends State<LoginScreen>
           children: [
             Icon(
               iconData,
-              size: 24,
+              size: label == 'Google' ? 18 : 24,
               color: label == 'Google'
                   ? Colors.red
                   : isDarkMode
