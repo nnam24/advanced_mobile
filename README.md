@@ -31,14 +31,12 @@
     <img src="https://ui-avatars.com/api/?name=Le+Nguyen+Thai&background=random&color=fff&size=128" alt="Lê Nguyên Thái" style="border-radius: 50%; width: 100px; height: 100px;">
     <h3>Lê Nguyên Thái</h3>
     <p><strong>Student ID:</strong> 21127162</p>
-    <p><em>Lead Developer</em></p>
   </div>
   
   <div style="text-align: center; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); background-color: #f8f9fa; width: 300px;">
     <img src="https://ui-avatars.com/api/?name=Nguyen+Nhat+Nam&background=random&color=fff&size=128" alt="Nguyễn Nhật Nam" style="border-radius: 50%; width: 100px; height: 100px;">
     <h3>Nguyễn Nhật Nam</h3>
     <p><strong>Student ID:</strong> 21127648</p>
-    <p><em>UI/UX Designer</em></p>
   </div>
 </div>
 
