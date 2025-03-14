@@ -46,6 +46,7 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
     final message = _messageController.text.trim();
     if (message.isEmpty) return;
 
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _messages.add(
@@ -54,7 +55,6 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
           content: message,
           type: MessageType.user,
           timestamp: DateTime.now(),
-          tokenCount: message.split(' ').length,
         ),
       );
     });
@@ -70,32 +70,29 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
       final aiBotService = Provider.of<AIBotService>(context, listen: false);
       final response = await aiBotService.askBot(widget.bot.id, message);
 
-      if (mounted) {
-        setState(() {
-          _messages.add(response);
-          _isLoading = false;
-        });
+      if (!mounted) return;
+      setState(() {
+        _messages.add(response);
+        _isLoading = false;
+      });
 
-        // Scroll to bottom after receiving response
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _scrollToBottom();
-        });
-      }
+      // Scroll to bottom after receiving response
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _messages.add(
-            Message(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              content: 'Sorry, there was an error processing your request.',
-              type: MessageType.assistant,
-              timestamp: DateTime.now(),
-              tokenCount: message.split(' ').length,
-            ),
-          );
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _messages.add(
+          Message(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            content: 'Sorry, there was an error processing your request.',
+            type: MessageType.assistant,
+            timestamp: DateTime.now(),
+          ),
+        );
+      });
     }
   }
 
@@ -118,6 +115,7 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             CircleAvatar(
               radius: 16,
@@ -130,7 +128,12 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            Text(widget.bot.name),
+            Flexible(
+              child: Text(
+                widget.bot.name,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         actions: [
@@ -149,83 +152,98 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          const AnimatedBackground(),
-          Column(
-            children: [
-              // Messages
-              Expanded(
-                child: _messages.isEmpty
-                    ? _buildEmptyState()
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          final message = _messages[index];
-                          return MessageBubble(
-                            key: ValueKey(message.id),
-                            message: message,
-                          );
-                        },
-                      ),
-              ),
-
-              // Loading indicator
-              if (_isLoading)
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceVariant,
-                          shape: BoxShape.circle,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Messages
+            Expanded(
+              child: Stack(
+                children: [
+                  const AnimatedBackground(),
+                  _messages.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _messages.length,
+                          itemBuilder: (context, index) {
+                            final message = _messages[index];
+                            return MessageBubble(
+                              key: ValueKey(message.id),
+                              message: message,
+                            );
+                          },
                         ),
-                        child: Center(
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Theme.of(context).colorScheme.primary,
-                              ),
+                ],
+              ),
+            ),
+
+            // Loading indicator
+            if (_isLoading)
+              Container(
+                padding: const EdgeInsets.all(16),
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceVariant,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Theme.of(context).colorScheme.primary,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Text(
-                        'Thinking...',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // Message input
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
-                  border: Border(
-                    top: BorderSide(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .outline
-                          .withOpacity(0.2),
                     ),
+                    const SizedBox(width: 16),
+                    Text(
+                      'Thinking...',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Message input
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border(
+                  top: BorderSide(
+                    color:
+                        Theme.of(context).colorScheme.outline.withOpacity(0.2),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 3,
+                    offset: const Offset(0, -1),
+                  ),
+                ],
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minHeight: 40,
+                        maxHeight: 120,
+                      ),
                       child: TextField(
                         controller: _messageController,
                         focusNode: _focusNode,
@@ -240,7 +258,7 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
                               Theme.of(context).colorScheme.surfaceVariant,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,
-                            vertical: 12,
+                            vertical: 10,
                           ),
                           suffixIcon: IconButton(
                             icon: const Icon(Icons.auto_awesome),
@@ -249,25 +267,29 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
                               _showPromptsBottomSheet(context);
                             },
                           ),
+                          isDense: true,
                         ),
                         maxLines: null,
-                        textInputAction: TextInputAction.send,
-                        onSubmitted: (_) => _sendMessage(),
+                        textInputAction: TextInputAction.newline,
+                        keyboardType: TextInputType.multiline,
                         enabled: !_isLoading,
+                        onSubmitted: (_) => _sendMessage(),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    FloatingActionButton(
-                      onPressed: _isLoading ? null : _sendMessage,
-                      mini: true,
-                      child: const Icon(Icons.send),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+                  FloatingActionButton(
+                    onPressed: _isLoading ? null : _sendMessage,
+                    mini: true,
+                    elevation: 2,
+                    highlightElevation: 4,
+                    child: const Icon(Icons.send),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -301,62 +323,66 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircleAvatar(
-            radius: 40,
-            backgroundColor:
-                Theme.of(context).colorScheme.primary.withOpacity(0.1),
-            child: Icon(
-              Icons.smart_toy,
-              size: 40,
-              color: Theme.of(context).colorScheme.primary,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              radius: 40,
+              backgroundColor:
+                  Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              child: Icon(
+                Icons.smart_toy,
+                size: 40,
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            widget.bot.name,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+            const SizedBox(height: 16),
+            Text(
+              widget.bot.name,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            widget.bot.description,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              'Start chatting with ${widget.bot.name} by sending a message below.',
+            const SizedBox(height: 8),
+            Text(
+              widget.bot.description,
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: () {
-              _messageController.text = 'Hello! How can you help me today?';
-            },
-            child: const Text('Try a sample message'),
-          ),
-          const SizedBox(height: 8),
-          TextButton.icon(
-            icon: const Icon(Icons.auto_awesome),
-            label: const Text('Browse prompts'),
-            onPressed: () {
-              _showPromptsBottomSheet(context);
-            },
-          ),
-        ],
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'Start chatting with ${widget.bot.name} by sending a message below.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                _messageController.text = 'Hello! How can you help me today?';
+              },
+              child: const Text('Try a sample message'),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('Browse prompts'),
+              onPressed: () {
+                _showPromptsBottomSheet(context);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
