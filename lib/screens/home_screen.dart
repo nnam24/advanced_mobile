@@ -758,18 +758,56 @@ class _HomeScreenState extends State<HomeScreen>
             },
           ),
           PopupMenuButton<String>(
-            onSelected: (value) {
+            onSelected: (value) async {
               if (value == 'new') {
                 chatProvider.createNewConversation();
               } else if (value == 'clear') {
                 chatProvider.reduceTokenUsage();
               } else if (value == 'logout') {
-                authProvider.logout().then((_) {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                        builder: (context) => const LoginScreen()),
-                  );
-                });
+                // Show loading indicator
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Row(
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        SizedBox(width: 16),
+                        Text('Logging out...'),
+                      ],
+                    ),
+                    duration: Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+
+                try {
+                  // Call the API logout method
+                  await authProvider.logout();
+
+                  // Navigate to login screen after successful logout
+                  if (context.mounted) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (context) => const LoginScreen()),
+                          (route) => false, // This removes all previous routes
+                    );
+                  }
+                } catch (e) {
+                  // Show error if logout fails
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Logout failed: ${e.toString()}'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
               }
             },
             itemBuilder: (context) => [
