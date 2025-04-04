@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/ai_bot_service.dart';
+import '../../services/knowledge_service.dart';
 import '../../models/knowledge_item.dart';
 import '../../widgets/animated_background.dart';
 
@@ -20,6 +21,8 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
       'text'; // 'text', 'file', 'url', 'drive', 'slack', 'confluence'
   String _selectedFileType = 'txt'; // 'txt', 'pdf', 'doc', 'docx'
   bool _isLoading = false;
+  final _knowledgeService = KnowledgeService();
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -33,27 +36,19 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
+        _errorMessage = null;
       });
 
       try {
-        // In a real app, this would call an API to create the knowledge item
-        // For now, we'll just simulate it with a delay
-        await Future.delayed(const Duration(seconds: 1));
-
-        final newKnowledge = KnowledgeItem(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          title: _titleController.text.trim(),
-          content: _selectedSource == 'text'
+        // Call the actual API to create the knowledge item
+        final newKnowledge = await _knowledgeService.createKnowledge(
+          knowledgeName: _titleController.text.trim(),
+          description: _selectedSource == 'text'
               ? _contentController.text.trim()
               : 'Content from ${_selectedSource}: ${_urlController.text}',
-          fileUrl: _selectedSource == 'text' ? '' : _urlController.text.trim(),
-          fileType: _selectedSource == 'text' ? 'text' : _selectedFileType,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
         );
 
-        // Add to the service
-        // Note: In a real app, this would be handled by a dedicated knowledge service
+        // Add to the service for local state management
         final aiBotService = Provider.of<AIBotService>(context, listen: false);
         aiBotService.addKnowledgeItem(newKnowledge);
 
@@ -64,14 +59,20 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
               behavior: SnackBarBehavior.floating,
             ),
           );
-          Navigator.pop(context);
+          // Return true to indicate successful creation
+          Navigator.pop(context, true);
         }
       } catch (e) {
+        setState(() {
+          _errorMessage = e.toString();
+        });
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to create knowledge source: $e'),
+              content: Text('Failed to create knowledge source: ${e.toString()}'),
               behavior: SnackBarBehavior.floating,
+              backgroundColor: Colors.red,
             ),
           );
         }
@@ -95,13 +96,13 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
             onPressed: _isLoading ? null : _createKnowledge,
             child: _isLoading
                 ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            )
                 : const Text('Create'),
           ),
         ],
@@ -116,6 +117,31 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Error message if any
+                  if (_errorMessage != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.withOpacity(0.5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   // Title field
                   TextFormField(
                     controller: _titleController,
@@ -282,7 +308,7 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
                         },
                         icon: Icon(_getConnectButtonIcon()),
                         label:
-                            Text('Connect to ${_selectedSource.toUpperCase()}'),
+                        Text('Connect to ${_selectedSource.toUpperCase()}'),
                       ),
                   ],
 
@@ -298,21 +324,21 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
                       ),
                       child: _isLoading
                           ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                          AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
                           : const Text(
-                              'Create Knowledge Source',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                        'Create Knowledge Source',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -441,3 +467,4 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
     }
   }
 }
+

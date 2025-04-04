@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/ai_bot.dart';
 import '../models/knowledge_item.dart';
 import '../models/message.dart';
+import '../services/knowledge_service.dart';
 
 class AIBotService extends ChangeNotifier {
   List<AIBot> _bots = [];
@@ -10,6 +11,7 @@ class AIBotService extends ChangeNotifier {
   List<KnowledgeItem> _knowledgeItems = [];
   bool _isLoading = false;
   String _error = '';
+  final KnowledgeService _knowledgeService = KnowledgeService();
 
   // Getters
   List<AIBot> get bots => _bots;
@@ -20,6 +22,20 @@ class AIBotService extends ChangeNotifier {
 
   AIBotService() {
     _initializeMockData();
+    // Load knowledge items from API
+    _loadKnowledgeItems();
+  }
+
+  Future<void> _loadKnowledgeItems() async {
+    try {
+      setLoading(true);
+      final result = await _knowledgeService.getKnowledgeItems();
+      _knowledgeItems = result['items'];
+      setLoading(false);
+    } catch (e) {
+      _error = e.toString();
+      setLoading(false);
+    }
   }
 
   void _initializeMockData() {
@@ -30,7 +46,7 @@ class AIBotService extends ChangeNotifier {
         name: 'Customer Support Bot',
         description: 'A bot that helps with customer inquiries',
         instructions:
-            'You are a helpful customer support assistant. Be polite and concise.',
+        'You are a helpful customer support assistant. Be polite and concise.',
         avatarUrl: '',
         createdAt: DateTime.now().subtract(const Duration(days: 10)),
         updatedAt: DateTime.now().subtract(const Duration(days: 2)),
@@ -46,7 +62,7 @@ class AIBotService extends ChangeNotifier {
         name: 'Marketing Assistant',
         description: 'Helps with marketing tasks and content creation',
         instructions:
-            'You are a creative marketing assistant. Generate engaging content.',
+        'You are a creative marketing assistant. Generate engaging content.',
         avatarUrl: '',
         createdAt: DateTime.now().subtract(const Duration(days: 5)),
         updatedAt: DateTime.now().subtract(const Duration(days: 1)),
@@ -59,44 +75,13 @@ class AIBotService extends ChangeNotifier {
         name: 'Code Helper',
         description: 'Assists with programming and debugging',
         instructions:
-            'You are a programming assistant. Provide code examples and explanations.',
+        'You are a programming assistant. Provide code examples and explanations.',
         avatarUrl: '',
         createdAt: DateTime.now().subtract(const Duration(days: 3)),
         updatedAt: DateTime.now(),
         knowledgeIds: [],
         isPublished: false,
         publishedChannels: {},
-      ),
-    ];
-
-    // Mock knowledge items
-    _knowledgeItems = [
-      KnowledgeItem(
-        id: '1',
-        title: 'Product FAQ',
-        content: 'Frequently asked questions about our products...',
-        fileUrl: '',
-        fileType: 'text',
-        createdAt: DateTime.now().subtract(const Duration(days: 15)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 15)),
-      ),
-      KnowledgeItem(
-        id: '2',
-        title: 'Return Policy',
-        content: 'Our return policy details...',
-        fileUrl: '',
-        fileType: 'text',
-        createdAt: DateTime.now().subtract(const Duration(days: 14)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 14)),
-      ),
-      KnowledgeItem(
-        id: '3',
-        title: 'Marketing Guidelines',
-        content: 'Brand voice and marketing guidelines...',
-        fileUrl: '',
-        fileType: 'text',
-        createdAt: DateTime.now().subtract(const Duration(days: 10)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 5)),
       ),
     ];
   }
@@ -239,16 +224,16 @@ class AIBotService extends ChangeNotifier {
       String response = '';
       if (bot.name.contains('Customer')) {
         response =
-            'As a customer support bot, I can help you with your inquiry. What specific product or service do you need assistance with?';
+        'As a customer support bot, I can help you with your inquiry. What specific product or service do you need assistance with?';
       } else if (bot.name.contains('Marketing')) {
         response =
-            'As your marketing assistant, I can help create engaging content. Would you like me to suggest some marketing ideas for your business?';
+        'As your marketing assistant, I can help create engaging content. Would you like me to suggest some marketing ideas for your business?';
       } else if (bot.name.contains('Code')) {
         response =
-            'I can help with your coding questions. What programming language are you working with?';
+        'I can help with your coding questions. What programming language are you working with?';
       } else {
         response =
-            'I\'m here to assist you with your question. How can I help you today?';
+        'I\'m here to assist you with your question. How can I help you today?';
       }
 
       _isLoading = false;
@@ -327,7 +312,7 @@ class AIBotService extends ChangeNotifier {
       final index = _bots.indexWhere((b) => b.id == botId);
       if (index != -1) {
         final currentKnowledgeIds =
-            List<String>.from(_bots[index].knowledgeIds);
+        List<String>.from(_bots[index].knowledgeIds);
         currentKnowledgeIds.remove(knowledgeId);
 
         final updatedBot = _bots[index].copyWith(
@@ -390,7 +375,7 @@ class AIBotService extends ChangeNotifier {
   // Get knowledge items for a bot
   List<KnowledgeItem> getBotKnowledgeItems(String botId) {
     final bot =
-        _bots.firstWhere((b) => b.id == botId, orElse: () => AIBot.empty());
+    _bots.firstWhere((b) => b.id == botId, orElse: () => AIBot.empty());
     return _knowledgeItems
         .where((item) => bot.knowledgeIds.contains(item.id))
         .toList();
@@ -399,7 +384,7 @@ class AIBotService extends ChangeNotifier {
   // Get available knowledge items (not already added to the bot)
   List<KnowledgeItem> getAvailableKnowledgeItems(String botId) {
     final bot =
-        _bots.firstWhere((b) => b.id == botId, orElse: () => AIBot.empty());
+    _bots.firstWhere((b) => b.id == botId, orElse: () => AIBot.empty());
     return _knowledgeItems
         .where((item) => !bot.knowledgeIds.contains(item.id))
         .toList();
@@ -424,23 +409,63 @@ class AIBotService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Set knowledge items (used when fetching from API)
+  void setKnowledgeItems(List<KnowledgeItem> items) {
+    _knowledgeItems = items;
+    notifyListeners();
+  }
+
   // Delete a knowledge item
-  void deleteKnowledgeItem(String itemId) {
-    _knowledgeItems.removeWhere((item) => item.id == itemId);
+  Future<void> deleteKnowledgeItem(String itemId) async {
+    try {
+      setLoading(true);
 
-    // Also remove this knowledge item from any bots that use it
-    for (int i = 0; i < _bots.length; i++) {
-      if (_bots[i].knowledgeIds.contains(itemId)) {
-        final updatedKnowledgeIds = List<String>.from(_bots[i].knowledgeIds)
-          ..remove(itemId);
+      // Call the API to delete the item
+      await _knowledgeService.deleteKnowledgeItem(itemId);
 
-        _bots[i] = _bots[i].copyWith(
-          knowledgeIds: updatedKnowledgeIds,
-          updatedAt: DateTime.now(),
-        );
+      // Update local state
+      _knowledgeItems.removeWhere((item) => item.id == itemId);
+
+      // Also remove this knowledge item from any bots that use it
+      for (int i = 0; i < _bots.length; i++) {
+        if (_bots[i].knowledgeIds.contains(itemId)) {
+          final updatedKnowledgeIds = List<String>.from(_bots[i].knowledgeIds)
+            ..remove(itemId);
+
+          _bots[i] = _bots[i].copyWith(
+            knowledgeIds: updatedKnowledgeIds,
+            updatedAt: DateTime.now(),
+          );
+        }
       }
-    }
 
+      setLoading(false);
+    } catch (e) {
+      _error = e.toString();
+      setLoading(false);
+      throw e; // Re-throw to allow handling in the UI
+    }
+  }
+
+  // Refresh knowledge items from API
+  Future<void> refreshKnowledgeItems({String? searchQuery}) async {
+    try {
+      setLoading(true);
+      final result = await _knowledgeService.getKnowledgeItems(
+        searchQuery: searchQuery,
+      );
+      _knowledgeItems = result['items'];
+      setLoading(false);
+    } catch (e) {
+      _error = e.toString();
+      setLoading(false);
+      throw e; // Re-throw to allow handling in the UI
+    }
+  }
+
+  // Set loading state
+  void setLoading(bool loading) {
+    _isLoading = loading;
     notifyListeners();
   }
 
@@ -450,3 +475,4 @@ class AIBotService extends ChangeNotifier {
     notifyListeners();
   }
 }
+
