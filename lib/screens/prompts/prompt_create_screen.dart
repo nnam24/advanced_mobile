@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/prompt_provider.dart';
 import '../../models/prompt.dart';
-import '../../providers/auth_provider.dart';
 import '../../widgets/animated_background.dart';
+import '../../providers/auth_provider.dart';
 
 class PromptCreateScreen extends StatefulWidget {
   const PromptCreateScreen({super.key});
@@ -16,46 +16,60 @@ class _PromptCreateScreenState extends State<PromptCreateScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
-  PromptCategory _selectedCategory = PromptCategory.general;
-  PromptVisibility _selectedVisibility = PromptVisibility.private;
+  final _descriptionController = TextEditingController();
+  PromptCategory _selectedCategory = PromptCategory.other;
+  bool _isPublic = false;
   bool _isFavorite = false;
 
   @override
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
+    _descriptionController.dispose();
     super.dispose();
   }
 
+  // Update the _createPrompt method to get the current user info from AuthProvider
   Future<void> _createPrompt() async {
     if (_formKey.currentState!.validate()) {
       final promptProvider =
           Provider.of<PromptProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
+      // Get current user info from AuthProvider
+      final user = authProvider.currentUser;
+      final userId = user?.id ?? '';
+      final userName = user?.name ?? 'Anonymous User';
+
       final prompt = Prompt(
-        id: '', // Will be set by the provider
+        id: '', // Will be set by the API
         title: _titleController.text.trim(),
         content: _contentController.text.trim(),
+        description: _descriptionController.text.trim().isEmpty
+            ? null
+            : _descriptionController.text.trim(),
         category: _selectedCategory,
-        visibility: _selectedVisibility,
-        authorId: authProvider.currentUser?.id ?? '',
-        authorName: authProvider.currentUser?.name ?? 'User',
+        isPublic: _isPublic,
+        userId: userId,
+        userName: userName,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
+        language: 'English', // Default language
         isFavorite: _isFavorite,
       );
 
       final success = await promptProvider.createPrompt(prompt);
 
-      if (success && mounted) {
+      if (success != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Prompt created successfully'),
             behavior: SnackBarBehavior.floating,
           ),
         );
-        Navigator.pop(context);
+
+        // Return the tab index to the previous screen instead of pushing a new screen
+        Navigator.pop(context, _isPublic ? 0 : 1);
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -158,6 +172,41 @@ class _PromptCreateScreenState extends State<PromptCreateScreen> {
 
                   const SizedBox(height: 24),
 
+                  // Description field
+                  Text(
+                    'Description (Optional)',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline
+                            .withOpacity(0.5),
+                      ),
+                    ),
+                    child: TextFormField(
+                      controller: _descriptionController,
+                      decoration: const InputDecoration(
+                        hintText:
+                            'Enter a description for this prompt (optional)',
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.all(16),
+                      ),
+                      maxLines: 3,
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
                   // Category selection
                   Text(
                     'Category',
@@ -239,23 +288,23 @@ class _PromptCreateScreenState extends State<PromptCreateScreen> {
                         ListTile(
                           title: const Text('Visibility'),
                           subtitle: const Text('Who can see this prompt'),
-                          trailing: SegmentedButton<PromptVisibility>(
+                          trailing: SegmentedButton<bool>(
                             segments: const [
-                              ButtonSegment<PromptVisibility>(
-                                value: PromptVisibility.private,
+                              ButtonSegment<bool>(
+                                value: false,
                                 label: Text('Private'),
                                 icon: Icon(Icons.lock),
                               ),
-                              ButtonSegment<PromptVisibility>(
-                                value: PromptVisibility.public,
+                              ButtonSegment<bool>(
+                                value: true,
                                 label: Text('Public'),
                                 icon: Icon(Icons.public),
                               ),
                             ],
-                            selected: {_selectedVisibility},
+                            selected: {_isPublic},
                             onSelectionChanged: (newSelection) {
                               setState(() {
-                                _selectedVisibility = newSelection.first;
+                                _isPublic = newSelection.first;
                               });
                             },
                           ),
