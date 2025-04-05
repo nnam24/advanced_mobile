@@ -584,7 +584,7 @@ class _PromptSelectorState extends State<_PromptSelector>
               _buildPromptList(
                   context,
                   (promptProvider) => _filterPrompts(promptProvider.prompts
-                      .where((p) => p.visibility == PromptVisibility.private)
+                      .where((p) => !p.isPublic)
                       .toList())),
             ],
           ),
