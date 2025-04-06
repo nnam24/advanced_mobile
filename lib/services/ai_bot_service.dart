@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ai_bot.dart';
 import '../models/knowledge_item.dart';
 import '../models/message.dart';
+import '../models/ai_bot_response.dart';
 
 class AIBotService extends ChangeNotifier {
   List<AIBot> _bots = [];
@@ -10,6 +13,12 @@ class AIBotService extends ChangeNotifier {
   List<KnowledgeItem> _knowledgeItems = [];
   bool _isLoading = false;
   String _error = '';
+  bool _hasMore = true;
+  int _offset = 0;
+  final int _limit = 20;
+
+  // Base URL for the API
+  static const String baseUrl = 'https://knowledge-api.dev.jarvis.cx';
 
   // Getters
   List<AIBot> get bots => _bots;
@@ -17,94 +26,165 @@ class AIBotService extends ChangeNotifier {
   List<KnowledgeItem> get knowledgeItems => _knowledgeItems;
   bool get isLoading => _isLoading;
   String get error => _error;
+  bool get hasMore => _hasMore;
 
   AIBotService() {
-    _initializeMockData();
+    // Load bots when service is initialized
+    fetchBots();
   }
 
-  void _initializeMockData() {
-    // Mock bots
-    _bots = [
-      AIBot(
-        id: '1',
-        name: 'Customer Support Bot',
-        description: 'A bot that helps with customer inquiries',
-        instructions:
-            'You are a helpful customer support assistant. Be polite and concise.',
-        avatarUrl: '',
-        createdAt: DateTime.now().subtract(const Duration(days: 10)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 2)),
-        knowledgeIds: ['1', '2'],
-        isPublished: true,
-        publishedChannels: {
-          'slack': 'C123456',
-          'telegram': '@customer_support_bot',
-        },
-      ),
-      AIBot(
-        id: '2',
-        name: 'Marketing Assistant',
-        description: 'Helps with marketing tasks and content creation',
-        instructions:
-            'You are a creative marketing assistant. Generate engaging content.',
-        avatarUrl: '',
-        createdAt: DateTime.now().subtract(const Duration(days: 5)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 1)),
-        knowledgeIds: ['3'],
-        isPublished: false,
-        publishedChannels: {},
-      ),
-      AIBot(
-        id: '3',
-        name: 'Code Helper',
-        description: 'Assists with programming and debugging',
-        instructions:
-            'You are a programming assistant. Provide code examples and explanations.',
-        avatarUrl: '',
-        createdAt: DateTime.now().subtract(const Duration(days: 3)),
-        updatedAt: DateTime.now(),
-        knowledgeIds: [],
-        isPublished: false,
-        publishedChannels: {},
-      ),
-    ];
+  // Get headers for API requests
+  Future<Map<String, String>> _getHeaders() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token') ?? '';
+    final guid = prefs.getString('jarvis_guid') ?? '';
 
-    // Mock knowledge items
-    _knowledgeItems = [
-      KnowledgeItem(
-        id: '1',
-        title: 'Product FAQ',
-        content: 'Frequently asked questions about our products...',
-        fileUrl: '',
-        fileType: 'text',
-        createdAt: DateTime.now().subtract(const Duration(days: 15)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 15)),
-      ),
-      KnowledgeItem(
-        id: '2',
-        title: 'Return Policy',
-        content: 'Our return policy details...',
-        fileUrl: '',
-        fileType: 'text',
-        createdAt: DateTime.now().subtract(const Duration(days: 14)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 14)),
-      ),
-      KnowledgeItem(
-        id: '3',
-        title: 'Marketing Guidelines',
-        content: 'Brand voice and marketing guidelines...',
-        fileUrl: '',
-        fileType: 'text',
-        createdAt: DateTime.now().subtract(const Duration(days: 10)),
-        updatedAt: DateTime.now().subtract(const Duration(days: 5)),
-      ),
-    ];
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+      'x-jarvis-guid': guid,
+    };
+  }
+
+  // Fetch bots from the API
+  Future<void> fetchBots({bool refresh = false}) async {
+    if (_isLoading) {
+      print('Already loading bots, skipping fetch request');
+      return;
+    }
+
+    if (refresh) {
+      print('Refreshing bot list from scratch');
+      _offset = 0;
+      _hasMore = true;
+      _bots = [];
+    }
+
+    if (!_hasMore && !refresh) {
+      print('No more bots to load and not refreshing, skipping fetch');
+      return;
+    }
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Build query parameters
+      final queryParams = <String, String>{
+        'offset': _offset.toString(),
+        'limit': _limit.toString(),
+        'order': 'DESC',
+        'order_field': 'createdAt',
+      };
+
+      // Build URL with query parameters
+      final uri = Uri.parse('$baseUrl/kb-core/v1/ai-assistant').replace(
+        queryParameters: queryParams,
+      );
+
+      // Get headers
+      final headers = await _getHeaders();
+
+      // Make API request
+      print('Fetching bots from: $uri');
+      print('Headers: ${headers.toString()}');
+
+      final response = await http.get(uri, headers: headers);
+
+      // Check if request was successful
+      if (response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
+        print('Response received: ${response.statusCode}');
+        print('Response body length: ${response.body.length}');
+
+        try {
+          final botResponse = AIBotResponse.fromJson(jsonData);
+          print('Parsed ${botResponse.data.length} bots');
+
+          if (refresh) {
+            _bots = botResponse.data;
+          } else {
+            _bots = [..._bots, ...botResponse.data];
+          }
+
+          _offset = _bots.length;
+          _hasMore = botResponse.meta.hasNext;
+          _error = '';
+        } catch (parseError) {
+          _error = 'Error parsing bot data: $parseError';
+          print(_error);
+          print('JSON data: $jsonData');
+        }
+      } else {
+        _error = 'Failed to load bots: ${response.statusCode}';
+        print(_error);
+        print('Response body: ${response.body}');
+      }
+    } catch (e) {
+      _error = 'Error fetching bots: $e';
+      print(_error);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+      print('Fetch complete, bot count: ${_bots.length}');
+    }
+  }
+
+  // Load more bots
+  Future<void> loadMore() async {
+    if (!_hasMore || _isLoading) return;
+    await fetchBots();
   }
 
   // Select a bot
-  void selectBot(String botId) {
-    _selectedBot = _bots.firstWhere((bot) => bot.id == botId);
-    notifyListeners();
+  Future<void> selectBot(String botId) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      print('Selecting bot with ID: $botId');
+
+      // First check if the bot is already in our list
+      final existingBot = _bots.firstWhere(
+        (bot) => bot.id == botId,
+        orElse: () => AIBot.empty(),
+      );
+
+      if (existingBot.id.isNotEmpty) {
+        print('Bot found in local list: ${existingBot.name}');
+        _selectedBot = existingBot;
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // If not found in our list, fetch it from the API
+      final uri = Uri.parse('$baseUrl/kb-core/v1/ai-assistant/$botId');
+      final headers = await _getHeaders();
+
+      print('Fetching bot details from: $uri');
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
+        print(
+            'Bot details received: ${jsonData.toString().substring(0, min(200, jsonData.toString().length))}...');
+
+        _selectedBot = AIBot.fromJson(jsonData);
+        print('Bot selected: ${_selectedBot?.name}');
+        _error = '';
+      } else {
+        _error = 'Failed to load bot details: ${response.statusCode}';
+        print(_error);
+        print('Response body: ${response.body}');
+      }
+    } catch (e) {
+      _error = 'Error selecting bot: $e';
+      print(_error);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   // Create a new bot
@@ -113,23 +193,66 @@ class AIBotService extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 1));
+      final uri = Uri.parse('$baseUrl/kb-core/v1/ai-assistant');
+      final headers = await _getHeaders();
 
-      // In a real app, you would call an API here
-      final newBot = bot.copyWith(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
+      // Prepare request body according to API documentation
+      final requestBody = {
+        'assistantName': bot.name,
+        'instructions': bot.instructions,
+        'description': bot.description,
+      };
+
+      print('Creating bot with data: $requestBody');
+      final response = await http.post(
+        uri,
+        headers: headers,
+        body: json.encode(requestBody),
       );
 
-      _bots.add(newBot);
-      _selectedBot = newBot;
-      _isLoading = false;
-      notifyListeners();
-      return true;
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
+        print('Bot created successfully: $jsonData');
+
+        // Parse the response according to API documentation
+        final newBot = AIBot(
+          id: jsonData['id'] ?? '',
+          name: jsonData['assistantName'] ?? bot.name,
+          description: jsonData['description'] ?? bot.description,
+          instructions: jsonData['instructions'] ?? bot.instructions,
+          avatarUrl: jsonData['avatarUrl'] ?? '',
+          createdAt: jsonData['createdAt'] != null
+              ? DateTime.parse(jsonData['createdAt'])
+              : DateTime.now(),
+          updatedAt: jsonData['updatedAt'] != null
+              ? DateTime.parse(jsonData['updatedAt'])
+              : DateTime.now(),
+          knowledgeIds: [],
+          isPublished: false,
+          publishedChannels: {},
+          openAiAssistantId: jsonData['openAiAssistantId'],
+          openAiThreadIdPlay: jsonData['openAiThreadIdPlay'],
+          createdBy: jsonData['createdBy'],
+          updatedBy: jsonData['updatedBy'],
+        );
+
+        _bots.add(newBot);
+        _selectedBot = newBot;
+        _error = '';
+
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _error = 'Failed to create bot: ${response.statusCode}';
+        print('Error creating bot: ${response.body}');
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
     } catch (e) {
       _error = e.toString();
+      print('Exception creating bot: $_error');
       _isLoading = false;
       notifyListeners();
       return false;
@@ -142,22 +265,59 @@ class AIBotService extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 1));
+      final uri = Uri.parse('$baseUrl/kb-core/v1/ai-assistant/${bot.id}');
+      final headers = await _getHeaders();
 
-      // In a real app, you would call an API here
-      final index = _bots.indexWhere((b) => b.id == bot.id);
-      if (index != -1) {
-        final updatedBot = bot.copyWith(updatedAt: DateTime.now());
-        _bots[index] = updatedBot;
-        _selectedBot = updatedBot;
+      // Prepare request body according to API documentation
+      final requestBody = {
+        'assistantName': bot.name,
+        'instructions': bot.instructions,
+        'description': bot.description,
+      };
+
+      print('Updating bot with ID: ${bot.id}');
+      print('Request body: $requestBody');
+
+      // Use PATCH instead of PUT as per API documentation
+      final response = await http.patch(
+        uri,
+        headers: headers,
+        body: json.encode(requestBody),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        print('Bot updated successfully: ${response.statusCode}');
+        final jsonData = json.decode(response.body);
+        print(
+            'Response data: ${jsonData.toString().substring(0, min(200, jsonData.toString().length))}...');
+
+        final updatedBot = AIBot.fromJson(jsonData);
+
+        // Update the bot in the local list
+        final index = _bots.indexWhere((b) => b.id == bot.id);
+        if (index != -1) {
+          _bots[index] = updatedBot;
+        }
+
+        // Update the selected bot if it's the one being edited
+        if (_selectedBot?.id == bot.id) {
+          _selectedBot = updatedBot;
+        }
+
+        _error = '';
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _error = 'Failed to update bot: ${response.statusCode}';
+        print('Error updating bot: ${response.body}');
+        _isLoading = false;
+        notifyListeners();
+        return false;
       }
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
     } catch (e) {
-      _error = e.toString();
+      _error = 'Exception updating bot: $e';
+      print(_error);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -170,53 +330,50 @@ class AIBotService extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 1));
+      final uri = Uri.parse('$baseUrl/kb-core/v1/ai-assistant/$botId');
+      final headers = await _getHeaders();
 
-      // In a real app, you would call an API here
-      _bots.removeWhere((bot) => bot.id == botId);
-      if (_selectedBot?.id == botId) {
-        _selectedBot = null;
-      }
+      print('Deleting bot with ID: $botId');
+      final response = await http.delete(uri, headers: headers);
 
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
+      if (response.statusCode == 200) {
+        // Parse the response according to API documentation
+        final jsonData = json.decode(response.body);
+        final success = jsonData is bool ? jsonData : true;
 
-  // Update bot instructions
-  Future<bool> updateBotInstructions(String botId, String instructions) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
+        print('Bot deleted successfully: $success');
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 1));
+        if (success) {
+          // Remove the bot from the local list
+          _bots.removeWhere((bot) => bot.id == botId);
 
-      // In a real app, you would call an API here
-      final index = _bots.indexWhere((b) => b.id == botId);
-      if (index != -1) {
-        final updatedBot = _bots[index].copyWith(
-          instructions: instructions,
-          updatedAt: DateTime.now(),
-        );
-        _bots[index] = updatedBot;
-        if (_selectedBot?.id == botId) {
-          _selectedBot = updatedBot;
+          // Clear selected bot if it's the one being deleted
+          if (_selectedBot?.id == botId) {
+            _selectedBot = null;
+          }
+
+          _error = '';
+        } else {
+          _error = 'Failed to delete bot: API returned false';
+          print(_error);
+          _isLoading = false;
+          notifyListeners();
+          return false;
         }
-      }
 
-      _isLoading = false;
-      notifyListeners();
-      return true;
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _error = 'Failed to delete bot: ${response.statusCode}';
+        print('Error deleting bot: ${response.body}');
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
     } catch (e) {
-      _error = e.toString();
+      _error = 'Exception deleting bot: $e';
+      print(_error);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -229,38 +386,42 @@ class AIBotService extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // Simulate API call with a shorter delay to prevent ANR
-      await Future.delayed(const Duration(milliseconds: 500));
+      final uri = Uri.parse('$baseUrl/kb-core/v1/ai-assistant/$botId/chat');
+      final headers = await _getHeaders();
 
-      // In a real app, you would call an API here
-      final bot = _bots.firstWhere((b) => b.id == botId);
-
-      // Generate a mock response based on the bot's instructions
-      String response = '';
-      if (bot.name.contains('Customer')) {
-        response =
-            'As a customer support bot, I can help you with your inquiry. What specific product or service do you need assistance with?';
-      } else if (bot.name.contains('Marketing')) {
-        response =
-            'As your marketing assistant, I can help create engaging content. Would you like me to suggest some marketing ideas for your business?';
-      } else if (bot.name.contains('Code')) {
-        response =
-            'I can help with your coding questions. What programming language are you working with?';
-      } else {
-        response =
-            'I\'m here to assist you with your question. How can I help you today?';
-      }
-
-      _isLoading = false;
-      notifyListeners();
-
-      return Message(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        content: response,
-        type: MessageType.assistant,
-        timestamp: DateTime.now(),
-        tokenCount: (response.length / 4).ceil(),
+      final response = await http.post(
+        uri,
+        headers: headers,
+        body: json.encode({'message': question}),
       );
+
+      if (response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
+        final responseText = jsonData['response'] ?? 'No response from the bot';
+
+        _isLoading = false;
+        notifyListeners();
+
+        return Message(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          content: responseText,
+          type: MessageType.assistant,
+          timestamp: DateTime.now(),
+        );
+      } else {
+        _error = 'Failed to get response: ${response.statusCode}';
+        print(_error);
+
+        _isLoading = false;
+        notifyListeners();
+
+        return Message(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          content: 'Sorry, I encountered an error: $_error',
+          type: MessageType.assistant,
+          timestamp: DateTime.now(),
+        );
+      }
     } catch (e) {
       _error = e.toString();
       _isLoading = false;
@@ -271,43 +432,56 @@ class AIBotService extends ChangeNotifier {
         content: 'Sorry, I encountered an error: $_error',
         type: MessageType.assistant,
         timestamp: DateTime.now(),
-        tokenCount: 10,
       );
     }
   }
 
   // Import knowledge to bot
-  Future<bool> importKnowledgeToBot(
-      String botId, List<String> knowledgeIds) async {
+  Future<bool> importKnowledgeToBot(String botId, String knowledgeId) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      // Simulate API call with a shorter delay
-      await Future.delayed(const Duration(milliseconds: 500));
+      final uri = Uri.parse(
+          '$baseUrl/kb-core/v1/ai-assistant/$botId/knowledges/$knowledgeId');
+      final headers = await _getHeaders();
 
-      // In a real app, you would call an API here
-      final index = _bots.indexWhere((b) => b.id == botId);
-      if (index != -1) {
-        final currentKnowledgeIds = Set<String>.from(_bots[index].knowledgeIds);
-        currentKnowledgeIds.addAll(knowledgeIds);
+      final response = await http.post(uri, headers: headers);
 
-        final updatedBot = _bots[index].copyWith(
-          knowledgeIds: currentKnowledgeIds.toList(),
-          updatedAt: DateTime.now(),
-        );
+      if (response.statusCode == 200) {
+        // Update local bot data
+        final index = _bots.indexWhere((b) => b.id == botId);
+        if (index != -1) {
+          final currentKnowledgeIds =
+              List<String>.from(_bots[index].knowledgeIds);
+          if (!currentKnowledgeIds.contains(knowledgeId)) {
+            currentKnowledgeIds.add(knowledgeId);
 
-        _bots[index] = updatedBot;
-        if (_selectedBot?.id == botId) {
-          _selectedBot = updatedBot;
+            final updatedBot = _bots[index].copyWith(
+              knowledgeIds: currentKnowledgeIds,
+              updatedAt: DateTime.now(),
+            );
+
+            _bots[index] = updatedBot;
+            if (_selectedBot?.id == botId) {
+              _selectedBot = updatedBot;
+            }
+          }
         }
-      }
 
-      _isLoading = false;
-      notifyListeners();
-      return true;
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _error = 'Failed to import knowledge: ${response.statusCode}';
+        print(_error);
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
     } catch (e) {
       _error = e.toString();
+      print(_error);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -320,67 +494,44 @@ class AIBotService extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // Simulate API call with a shorter delay
-      await Future.delayed(const Duration(milliseconds: 500));
+      final uri = Uri.parse(
+          '$baseUrl/kb-core/v1/ai-assistant/$botId/knowledges/$knowledgeId');
+      final headers = await _getHeaders();
 
-      // In a real app, you would call an API here
-      final index = _bots.indexWhere((b) => b.id == botId);
-      if (index != -1) {
-        final currentKnowledgeIds =
-            List<String>.from(_bots[index].knowledgeIds);
-        currentKnowledgeIds.remove(knowledgeId);
+      final response = await http.delete(uri, headers: headers);
 
-        final updatedBot = _bots[index].copyWith(
-          knowledgeIds: currentKnowledgeIds,
-          updatedAt: DateTime.now(),
-        );
+      if (response.statusCode == 200) {
+        // Update local bot data
+        final index = _bots.indexWhere((b) => b.id == botId);
+        if (index != -1) {
+          final currentKnowledgeIds =
+              List<String>.from(_bots[index].knowledgeIds);
+          currentKnowledgeIds.remove(knowledgeId);
 
-        _bots[index] = updatedBot;
-        if (_selectedBot?.id == botId) {
-          _selectedBot = updatedBot;
+          final updatedBot = _bots[index].copyWith(
+            knowledgeIds: currentKnowledgeIds,
+            updatedAt: DateTime.now(),
+          );
+
+          _bots[index] = updatedBot;
+          if (_selectedBot?.id == botId) {
+            _selectedBot = updatedBot;
+          }
         }
-      }
 
-      _isLoading = false;
-      notifyListeners();
-      return true;
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _error = 'Failed to remove knowledge: ${response.statusCode}';
+        print(_error);
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
     } catch (e) {
       _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  // Publish bot to channels
-  Future<bool> publishBot(String botId, Map<String, String> channels) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      // Simulate API call with a shorter delay
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      // In a real app, you would call an API here
-      final index = _bots.indexWhere((b) => b.id == botId);
-      if (index != -1) {
-        final updatedBot = _bots[index].copyWith(
-          isPublished: true,
-          publishedChannels: channels,
-          updatedAt: DateTime.now(),
-        );
-
-        _bots[index] = updatedBot;
-        if (_selectedBot?.id == botId) {
-          _selectedBot = updatedBot;
-        }
-      }
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _error = e.toString();
+      print(_error);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -389,19 +540,12 @@ class AIBotService extends ChangeNotifier {
 
   // Get knowledge items for a bot
   List<KnowledgeItem> getBotKnowledgeItems(String botId) {
-    final bot =
-        _bots.firstWhere((b) => b.id == botId, orElse: () => AIBot.empty());
+    final bot = _bots.firstWhere(
+      (b) => b.id == botId,
+      orElse: () => AIBot.empty(),
+    );
     return _knowledgeItems
         .where((item) => bot.knowledgeIds.contains(item.id))
-        .toList();
-  }
-
-  // Get available knowledge items (not already added to the bot)
-  List<KnowledgeItem> getAvailableKnowledgeItems(String botId) {
-    final bot =
-        _bots.firstWhere((b) => b.id == botId, orElse: () => AIBot.empty());
-    return _knowledgeItems
-        .where((item) => !bot.knowledgeIds.contains(item.id))
         .toList();
   }
 
@@ -418,35 +562,14 @@ class AIBotService extends ChangeNotifier {
     }).toList();
   }
 
-  // Add a knowledge item
-  void addKnowledgeItem(KnowledgeItem item) {
-    _knowledgeItems.add(item);
-    notifyListeners();
-  }
-
-  // Delete a knowledge item
-  void deleteKnowledgeItem(String itemId) {
-    _knowledgeItems.removeWhere((item) => item.id == itemId);
-
-    // Also remove this knowledge item from any bots that use it
-    for (int i = 0; i < _bots.length; i++) {
-      if (_bots[i].knowledgeIds.contains(itemId)) {
-        final updatedKnowledgeIds = List<String>.from(_bots[i].knowledgeIds)
-          ..remove(itemId);
-
-        _bots[i] = _bots[i].copyWith(
-          knowledgeIds: updatedKnowledgeIds,
-          updatedAt: DateTime.now(),
-        );
-      }
-    }
-
-    notifyListeners();
-  }
-
   // Clear error
   void clearError() {
     _error = '';
     notifyListeners();
+  }
+
+  // Helper function for string length
+  int min(int a, int b) {
+    return a < b ? a : b;
   }
 }
