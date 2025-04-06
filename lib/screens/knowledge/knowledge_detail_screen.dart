@@ -306,7 +306,7 @@ class KnowledgeDetailScreen extends StatelessWidget {
               // In a real app, this would call an API
               final aiBotService =
                   Provider.of<AIBotService>(context, listen: false);
-              aiBotService.deleteKnowledgeItem(item.id);
+              //aiBotService.deleteKnowledgeItem(item.id);
 
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(

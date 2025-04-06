@@ -55,7 +55,7 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
         // Add to the service
         // Note: In a real app, this would be handled by a dedicated knowledge service
         final aiBotService = Provider.of<AIBotService>(context, listen: false);
-        aiBotService.addKnowledgeItem(newKnowledge);
+        //aiBotService.addKnowledgeItem(newKnowledge);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
