@@ -28,13 +28,14 @@ class _AIBotKnowledgeScreenState extends State<AIBotKnowledgeScreen> {
   @override
   Widget build(BuildContext context) {
     final aiBotService = Provider.of<AIBotService>(context);
-    final availableKnowledge = _searchQuery.isEmpty
-        ? aiBotService.getAvailableKnowledgeItems(widget.bot.id)
-        : aiBotService
-            .getAvailableKnowledgeItems(widget.bot.id)
-            .where((item) =>
-                item.title.toLowerCase().contains(_searchQuery.toLowerCase()))
-            .toList();
+    final availableKnowledge = _searchQuery.isEmpty;
+
+    //     ? aiBotService.getAvailableKnowledgeItems(widget.bot.id)
+    //     : aiBotService
+    //         .getAvailableKnowledgeItems(widget.bot.id)
+    //         .where((item) =>
+    //             item.title.toLowerCase().contains(_searchQuery.toLowerCase()))
+    //         .toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -90,21 +91,21 @@ class _AIBotKnowledgeScreenState extends State<AIBotKnowledgeScreen> {
               ),
 
               // Knowledge list
-              Expanded(
-                child: aiBotService.isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : availableKnowledge.isEmpty
-                        ? _buildEmptyState()
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: availableKnowledge.length,
-                            itemBuilder: (context, index) {
-                              final item = availableKnowledge[index];
-                              return _buildKnowledgeItem(
-                                  context, item, aiBotService);
-                            },
-                          ),
-              ),
+              // Expanded(
+              //   child: aiBotService.isLoading
+              //       ? const Center(child: CircularProgressIndicator())
+              //       : availableKnowledge
+              //           ? _buildEmptyState()
+              //           : ListView.builder(
+              //               padding: const EdgeInsets.all(16),
+              //               itemCount: availableKnowledge.length,
+              //               itemBuilder: (context, index) {
+              //                 final item = availableKnowledge[index];
+              //                 return _buildKnowledgeItem(
+              //                     context, item, aiBotService);
+              //               },
+              //             ),
+              // ),
             ],
           ),
         ],
@@ -227,28 +228,28 @@ class _AIBotKnowledgeScreenState extends State<AIBotKnowledgeScreen> {
         trailing: IconButton(
           icon: const Icon(Icons.add_circle_outline, color: Colors.green),
           onPressed: () async {
-            final success = await aiBotService.importKnowledgeToBot(
-              widget.bot.id,
-              [item.id],
-            );
+            // final success = await aiBotService.importKnowledgeToBot(
+            //   widget.bot.id,
+            //   [item.id],
+            // );
 
-            if (success && mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Knowledge source added successfully'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-              setState(() {}); // Refresh the UI
-            } else if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                      'Failed to add knowledge source: ${aiBotService.error}'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            }
+            // if (success && mounted) {
+            //   ScaffoldMessenger.of(context).showSnackBar(
+            //     const SnackBar(
+            //       content: Text('Knowledge source added successfully'),
+            //       behavior: SnackBarBehavior.floating,
+            //     ),
+            //   );
+            //   setState(() {}); // Refresh the UI
+            // } else if (mounted) {
+            //   ScaffoldMessenger.of(context).showSnackBar(
+            //     SnackBar(
+            //       content: Text(
+            //           'Failed to add knowledge source: ${aiBotService.error}'),
+            //       behavior: SnackBarBehavior.floating,
+            //     ),
+            //   );
+            // }
           },
         ),
         onTap: () {
@@ -316,31 +317,31 @@ class _AIBotKnowledgeScreenState extends State<AIBotKnowledgeScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.of(context).pop();
-              final aiBotService =
-                  Provider.of<AIBotService>(context, listen: false);
-              final success = await aiBotService.importKnowledgeToBot(
-                widget.bot.id,
-                [item.id],
-              );
+              // Navigator.of(context).pop();
+              // final aiBotService =
+              //     Provider.of<AIBotService>(context, listen: false);
+              // final success = await aiBotService.importKnowledgeToBot(
+              //   widget.bot.id,
+              //   [item.id],
+              // );
 
-              if (success && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Knowledge source added successfully'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-                setState(() {}); // Refresh the UI
-              } else if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                        'Failed to add knowledge source: ${aiBotService.error}'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
+              // if (success && mounted) {
+              //   ScaffoldMessenger.of(context).showSnackBar(
+              //     const SnackBar(
+              //       content: Text('Knowledge source added successfully'),
+              //       behavior: SnackBarBehavior.floating,
+              //     ),
+              //   );
+              //   setState(() {}); // Refresh the UI
+              // } else if (mounted) {
+              //   ScaffoldMessenger.of(context).showSnackBar(
+              //     SnackBar(
+              //       content: Text(
+              //           'Failed to add knowledge source: ${aiBotService.error}'),
+              //       behavior: SnackBarBehavior.floating,
+              //     ),
+              //   );
+              // }
             },
             child: const Text('Add to Bot'),
           ),
