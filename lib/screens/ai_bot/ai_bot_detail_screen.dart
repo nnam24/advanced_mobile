@@ -21,6 +21,8 @@ class AIBotDetailScreen extends StatefulWidget {
 class _AIBotDetailScreenState extends State<AIBotDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  bool _isLoading = false;
+  bool _isDeleting = false;
 
   @override
   void initState() {
@@ -29,9 +31,41 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
 
     // Select the bot
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final aiBotService = Provider.of<AIBotService>(context, listen: false);
-      aiBotService.selectBot(widget.botId);
+      _loadBotDetails();
     });
+  }
+
+  Future<void> _loadBotDetails() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final aiBotService = Provider.of<AIBotService>(context, listen: false);
+      await aiBotService.selectBot(widget.botId);
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading bot details: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load bot details: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -45,7 +79,7 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
     final aiBotService = Provider.of<AIBotService>(context);
     final bot = aiBotService.selectedBot;
 
-    if (aiBotService.isLoading) {
+    if (_isLoading || aiBotService.isLoading) {
       return Scaffold(
         appBar: AppBar(title: const Text('AI Bot Details')),
         body: const Center(child: CircularProgressIndicator()),
@@ -55,7 +89,42 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
     if (bot == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('AI Bot Details')),
-        body: const Center(child: Text('Bot not found')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Theme.of(context).colorScheme.error.withOpacity(0.5),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Bot Not Found',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'The AI bot you\'re looking for could not be found',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Go Back'),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -71,7 +140,10 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
                 MaterialPageRoute(
                   builder: (context) => AIBotEditScreen(bot: bot),
                 ),
-              );
+              ).then((_) {
+                // Refresh bot details when returning from edit screen
+                _loadBotDetails();
+              });
             },
           ),
           PopupMenuButton<String>(
@@ -84,7 +156,10 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
                   MaterialPageRoute(
                     builder: (context) => AIBotPublishScreen(bot: bot),
                   ),
-                );
+                ).then((_) {
+                  // Refresh bot details when returning from publish screen
+                  _loadBotDetails();
+                });
               }
             },
             itemBuilder: (context) => [
@@ -227,6 +302,25 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
               ),
             ],
           ),
+
+          // Show loading overlay when deleting
+          if (_isDeleting)
+            Container(
+              color: Colors.black.withOpacity(0.5),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Deleting bot...',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -318,7 +412,10 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
                   MaterialPageRoute(
                     builder: (context) => AIBotEditScreen(bot: bot),
                   ),
-                );
+                ).then((_) {
+                  // Refresh bot details when returning from edit screen
+                  _loadBotDetails();
+                });
               },
               icon: const Icon(Icons.edit),
               label: const Text('Edit Instructions'),
@@ -356,7 +453,10 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
                     MaterialPageRoute(
                       builder: (context) => AIBotKnowledgeScreen(bot: bot),
                     ),
-                  );
+                  ).then((_) {
+                    // Refresh bot details when returning from knowledge screen
+                    _loadBotDetails();
+                  });
                 },
                 icon: const Icon(Icons.add),
                 label: const Text('Add Knowledge'),
@@ -421,7 +521,10 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
                 MaterialPageRoute(
                   builder: (context) => AIBotKnowledgeScreen(bot: bot),
                 ),
-              );
+              ).then((_) {
+                // Refresh bot details when returning from knowledge screen
+                _loadBotDetails();
+              });
             },
             icon: const Icon(Icons.add),
             label: const Text('Add Knowledge'),
@@ -583,40 +686,75 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
   }
 
   void _showDeleteConfirmation(BuildContext context, AIBot bot) {
+    // Get the provider reference before any async operations
+    final aiBotService = Provider.of<AIBotService>(context, listen: false);
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete AI Bot'),
         content: Text(
             'Are you sure you want to delete "${bot.name}"? This action cannot be undone.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.of(context).pop();
-              final aiBotService =
-                  Provider.of<AIBotService>(context, listen: false);
-              final success = await aiBotService.deleteBot(bot.id);
+              // Close the dialog first
+              Navigator.of(dialogContext).pop();
 
-              if (success && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('AI Bot deleted successfully'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-                Navigator.of(context).pop(); // Go back to list screen
-              } else if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content:
-                        Text('Failed to delete AI Bot: ${aiBotService.error}'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+              // Only proceed if the main widget is still mounted
+              if (!mounted) return;
+
+              // Set deleting state
+              setState(() {
+                _isDeleting = true;
+              });
+
+              try {
+                final success = await aiBotService.deleteBot(bot.id);
+
+                // Only proceed if the widget is still mounted
+                if (!mounted) return;
+
+                // Reset deleting state
+                setState(() {
+                  _isDeleting = false;
+                });
+
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('AI Bot deleted successfully'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  Navigator.of(context)
+                      .pop(true); // Go back to list screen with result
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          'Failed to delete AI Bot: ${aiBotService.error}'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              } catch (e) {
+                // Handle any exceptions
+                if (mounted) {
+                  setState(() {
+                    _isDeleting = false;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error deleting AI Bot: $e'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
               }
             },
             style: ElevatedButton.styleFrom(
