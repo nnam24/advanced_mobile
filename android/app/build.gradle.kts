@@ -46,3 +46,7 @@ flutter {
     source = "../.."
 }
 
+dependencies {
+    // Add this in addition to your other dependencies
+    implementation("androidx.activity:activity:1.6.0-alpha05")
+}

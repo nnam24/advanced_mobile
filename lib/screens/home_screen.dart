@@ -59,6 +59,35 @@ class _HomeScreenState extends State<HomeScreen>
         );
       }
     });
+
+
+    // Set up session expiration handler
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+      // Set callback for session expiration
+      authProvider.onSessionExpired = (String reason) {
+        // Navigate to login screen
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+              (route) => false,
+        );
+
+        // Show error message as a snackbar after navigation
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(reason),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
+        });
+      };
+    });
   }
 
   @override
