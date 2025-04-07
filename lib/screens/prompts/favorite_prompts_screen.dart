@@ -131,7 +131,7 @@ class FavoritePromptsScreen extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: Icon(
+                    icon: const Icon(
                       Icons.favorite,
                       color: Colors.red,
                     ),
@@ -156,7 +156,7 @@ class FavoritePromptsScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'By ${prompt.authorName}',
+                    'By ${prompt.userName}',
                     style: TextStyle(
                       fontSize: 12,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,

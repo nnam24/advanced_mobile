@@ -126,7 +126,7 @@ class PromptCategoryScreen extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '${prompt.visibility == PromptVisibility.public ? 'Public' : 'Private'} • ${prompt.usageCount} uses',
+                          '${prompt.isPublic ? 'Public' : 'Private'} • ${prompt.usageCount} uses',
                           style: TextStyle(
                             fontSize: 12,
                             color:
@@ -164,7 +164,7 @@ class PromptCategoryScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'By ${prompt.authorName}',
+                    'By ${prompt.userName}',
                     style: TextStyle(
                       fontSize: 12,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,

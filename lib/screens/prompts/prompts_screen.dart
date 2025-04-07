@@ -7,7 +7,12 @@ import 'prompt_detail_screen.dart';
 import 'prompt_create_screen.dart';
 
 class PromptsScreen extends StatefulWidget {
-  const PromptsScreen({super.key});
+  final int initialTabIndex;
+
+  const PromptsScreen({
+    super.key,
+    this.initialTabIndex = 0, // Default to the Public tab (index 0)
+  });
 
   @override
   State<PromptsScreen> createState() => _PromptsScreenState();
@@ -18,35 +23,118 @@ class _PromptsScreenState extends State<PromptsScreen>
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
   PromptCategory? _selectedCategory;
+  final ScrollController _scrollController = ScrollController();
+  bool _isInitialized = false;
+  // Add this flag to track if we've already triggered a favorites fetch
+  bool _favoritesFetchTriggered = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: widget.initialTabIndex,
+    );
 
-    _tabController.addListener(() {
-      // Update visibility filter based on tab
-      if (_tabController.index == 0) {
-        Provider.of<PromptProvider>(context, listen: false)
-            .setVisibilityFilter(PromptVisibility.public);
-      } else if (_tabController.index == 1) {
-        Provider.of<PromptProvider>(context, listen: false)
-            .setVisibilityFilter(PromptVisibility.private);
-      }
-      // Tab 2 is favorites, handled differently
-    });
+    _tabController.addListener(_onTabChanged);
 
-    // Set initial visibility filter
+    // Set up scroll controller for pagination
+    _scrollController.addListener(_onScroll);
+
+    // Set initial visibility filter and fetch data
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<PromptProvider>(context, listen: false)
-          .setVisibilityFilter(PromptVisibility.public);
+      _loadInitialData();
     });
+  }
+
+  void _loadInitialData() {
+    if (_isInitialized) return;
+
+    final promptProvider = Provider.of<PromptProvider>(context, listen: false);
+
+    // Load data based on the initial tab
+    if (_tabController.index == 0) {
+      // Public tab
+      promptProvider.setVisibilityFilter(true);
+      promptProvider.fetchPrompts(isPublic: true, refresh: true);
+    } else if (_tabController.index == 1) {
+      // My Prompts tab
+      promptProvider.setVisibilityFilter(false);
+      promptProvider.fetchPrompts(isPublic: false, refresh: true);
+    } else if (_tabController.index == 2) {
+      // Favorites tab
+      promptProvider.fetchFavorites(refresh: true);
+    }
+
+    _isInitialized = true;
+  }
+
+// Modify the _onTabChanged method to be more efficient and reliable
+  void _onTabChanged() {
+    if (!_tabController.indexIsChanging) {
+      final promptProvider =
+          Provider.of<PromptProvider>(context, listen: false);
+
+      // Reset search and category filters when changing tabs
+      _searchController.clear();
+      setState(() {
+        _selectedCategory = null;
+      });
+
+      // Load data based on the selected tab
+      if (_tabController.index == 0) {
+        // Public tab
+        promptProvider.setSearchQuery('');
+        promptProvider.setCategory(null);
+        promptProvider.setVisibilityFilter(true);
+        // Explicitly fetch data for this tab
+        promptProvider.fetchPrompts(isPublic: true, refresh: true);
+      } else if (_tabController.index == 1) {
+        // My Prompts tab
+        promptProvider.setSearchQuery('');
+        promptProvider.setCategory(null);
+        promptProvider.setVisibilityFilter(false);
+        // Explicitly fetch data for this tab
+        promptProvider.fetchPrompts(isPublic: false, refresh: true);
+      } else if (_tabController.index == 2) {
+        // Favorites tab
+        promptProvider.setSearchQuery('');
+        promptProvider.setCategory(null);
+        // Explicitly fetch favorites
+        promptProvider.fetchFavorites(refresh: true);
+      }
+    }
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      // Load more data when we're near the end of the list
+      final promptProvider =
+          Provider.of<PromptProvider>(context, listen: false);
+      if (!promptProvider.isLoading) {
+        if (_tabController.index == 2) {
+          // Favorites tab
+          if (promptProvider.hasMoreFavorites) {
+            promptProvider.fetchFavorites();
+          }
+        } else {
+          // Public or My Prompts tabs
+          if (promptProvider.hasNext) {
+            promptProvider.loadMore();
+          }
+        }
+      }
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -156,10 +244,10 @@ class _PromptsScreenState extends State<PromptsScreen>
                   controller: _tabController,
                   children: [
                     // Public prompts tab
-                    _buildPromptList(context, PromptVisibility.public),
+                    _buildPromptList(context, true),
 
                     // My prompts tab
-                    _buildPromptList(context, PromptVisibility.private),
+                    _buildPromptList(context, false),
 
                     // Favorites tab
                     _buildFavoritesList(context),
@@ -171,93 +259,197 @@ class _PromptsScreenState extends State<PromptsScreen>
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
+        onPressed: () async {
+          // Navigate to create screen and wait for result
+          final result = await Navigator.push<int>(
             context,
             MaterialPageRoute(
               builder: (context) => const PromptCreateScreen(),
             ),
           );
+
+          // If we got a result (tab index), switch to that tab
+          if (result != null && mounted) {
+            _tabController.animateTo(result);
+
+            // Refresh the prompts list to show the newly created prompt
+            final promptProvider =
+                Provider.of<PromptProvider>(context, listen: false);
+            if (result == 0) {
+              // Public tab
+              promptProvider.fetchPrompts(isPublic: true, refresh: true);
+            } else if (result == 1) {
+              // My Prompts tab
+              promptProvider.fetchPrompts(isPublic: false, refresh: true);
+            }
+          }
         },
         child: const Icon(Icons.add),
       ),
     );
   }
 
-  Widget _buildPromptList(BuildContext context, PromptVisibility visibility) {
-    final promptProvider = Provider.of<PromptProvider>(context);
-    final prompts = promptProvider.prompts;
+// Modify the _buildPromptList method to handle loading states better
+  Widget _buildPromptList(BuildContext context, bool isPublic) {
+    return Consumer<PromptProvider>(
+      builder: (context, promptProvider, child) {
+        // Add debug print to track what's happening
+        print(
+            'Building prompt list for isPublic=$isPublic, current filter=${promptProvider.isPublicFilter}, prompts count=${promptProvider.prompts.length}');
 
-    if (promptProvider.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+        // Make sure we're showing the right prompts based on the tab
+        if (promptProvider.isPublicFilter != isPublic) {
+          // If the filter doesn't match the isPublic parameter, update the filter and fetch data
+          print('Filter mismatch, updating to isPublic=$isPublic');
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            promptProvider.setVisibilityFilter(isPublic);
+            promptProvider.fetchPrompts(isPublic: isPublic, refresh: true);
+          });
 
-    if (prompts.isEmpty) {
-      return _buildEmptyState(context, visibility);
-    }
+          // Show a loading indicator while we're switching filters
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: prompts.length,
-      itemBuilder: (context, index) {
-        final prompt = prompts[index];
-        return _buildPromptCard(context, prompt);
+        if (promptProvider.isLoading && promptProvider.prompts.isEmpty) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final prompts = promptProvider.prompts;
+        if (prompts.isEmpty) {
+          return _buildEmptyState(context, isPublic);
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            print('Manual refresh triggered for isPublic=$isPublic');
+            await promptProvider.fetchPrompts(
+                isPublic: isPublic, refresh: true);
+          },
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.all(16),
+            itemCount: prompts.length +
+                (promptProvider.isLoading && prompts.isNotEmpty ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index == prompts.length) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+
+              final prompt = prompts[index];
+              return _buildPromptCard(context, prompt);
+            },
+          ),
+        );
       },
     );
   }
 
+// Modify the _buildFavoritesList method to prevent infinite loading when there are no favorites
   Widget _buildFavoritesList(BuildContext context) {
-    final promptProvider = Provider.of<PromptProvider>(context);
-    final favorites = promptProvider.favoritePrompts;
+    return Consumer<PromptProvider>(
+      builder: (context, promptProvider, child) {
+        // Add debug print to track what's happening
+        print(
+            'Building favorites list, favorites count=${promptProvider.favoritePrompts.length}, isLoading=${promptProvider.isLoading}');
 
-    if (promptProvider.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+        // Check if we need to load favorites (only once)
+        if (_tabController.index == 2 && !_favoritesFetchTriggered) {
+          // Only trigger a fetch if we're not already loading
+          if (!promptProvider.isLoading) {
+            print('Favorites tab selected, triggering one-time fetch');
+            _favoritesFetchTriggered = true;
 
-    if (favorites.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.favorite_border,
-              size: 64,
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'No Favorite Prompts',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Add prompts to your favorites to see them here',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
+            // Use a post-frame callback to avoid build-during-build errors
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                promptProvider.fetchFavorites(refresh: true);
+              }
+            });
+          }
+        } else if (_tabController.index != 2) {
+          // Reset the flag when we're not on the favorites tab
+          _favoritesFetchTriggered = false;
+        }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: favorites.length,
-      itemBuilder: (context, index) {
-        final prompt = favorites[index];
-        return _buildPromptCard(context, prompt);
+        // Show loading indicator only during the initial load
+        if (promptProvider.isLoading &&
+            promptProvider.favoritePrompts.isEmpty &&
+            _favoritesFetchTriggered) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        // Show empty state if we've completed loading and have no favorites
+        if (promptProvider.favoritePrompts.isEmpty &&
+            (!promptProvider.isLoading || !_favoritesFetchTriggered)) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.favorite_border,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No Favorite Prompts',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Add prompts to your favorites to see them here',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Show the list of favorites
+        return RefreshIndicator(
+          onRefresh: () {
+            print('Manual refresh triggered for favorites');
+            return promptProvider.fetchFavorites(refresh: true);
+          },
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.all(16),
+            itemCount: promptProvider.favoritePrompts.length +
+                (promptProvider.isLoading &&
+                        promptProvider.favoritePrompts.isNotEmpty
+                    ? 1
+                    : 0),
+            itemBuilder: (context, index) {
+              if (index == promptProvider.favoritePrompts.length) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+
+              final prompt = promptProvider.favoritePrompts[index];
+              return _buildPromptCard(context, prompt);
+            },
+          ),
+        );
       },
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, PromptVisibility visibility) {
-    final isPublic = visibility == PromptVisibility.public;
-
+  Widget _buildEmptyState(BuildContext context, bool isPublic) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -288,13 +480,22 @@ class _PromptsScreenState extends State<PromptsScreen>
           const SizedBox(height: 24),
           if (!isPublic)
             ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
+              onPressed: () async {
+                // Navigate to create screen and wait for result
+                final result = await Navigator.push<int>(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const PromptCreateScreen(),
                   ),
                 );
+
+                // If we got a result (tab index), switch to that tab
+                if (result != null && mounted) {
+                  _tabController.animateTo(result);
+                  // Refresh the prompts list to show the newly created prompt
+                  Provider.of<PromptProvider>(context, listen: false)
+                      .refreshPrompts();
+                }
               },
               icon: const Icon(Icons.add),
               label: const Text('Create Prompt'),
@@ -318,12 +519,37 @@ class _PromptsScreenState extends State<PromptsScreen>
       ),
       child: InkWell(
         onTap: () {
+          // Verify that the prompt has a valid ID before navigating
+          if (prompt.id.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    'Error: This prompt has no ID and cannot be viewed in detail'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
+          }
+
+          // Pass the entire prompt object to the detail screen
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => PromptDetailScreen(promptId: prompt.id),
+              builder: (context) => PromptDetailScreen(
+                promptId: prompt.id,
+                prompt: prompt, // Pass the prompt object directly
+              ),
             ),
-          );
+          ).then((_) {
+            // Refresh the current tab when returning from detail screen
+            if (_tabController.index == 0) {
+              promptProvider.fetchPrompts(isPublic: true, refresh: true);
+            } else if (_tabController.index == 1) {
+              promptProvider.fetchPrompts(isPublic: false, refresh: true);
+            } else if (_tabController.index == 2) {
+              promptProvider.fetchFavorites(refresh: true);
+            }
+          });
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -352,6 +578,8 @@ class _PromptsScreenState extends State<PromptsScreen>
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         Text(
                           '${Prompt.getCategoryName(prompt.category)} • ${prompt.usageCount} uses',
@@ -360,6 +588,8 @@ class _PromptsScreenState extends State<PromptsScreen>
                             color:
                                 Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -372,6 +602,18 @@ class _PromptsScreenState extends State<PromptsScreen>
                       color: prompt.isFavorite ? Colors.red : null,
                     ),
                     onPressed: () {
+                      // Check if the prompt has a valid ID before toggling favorite
+                      if (prompt.id.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content:
+                                Text('Cannot favorite: Prompt has no valid ID'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                        return;
+                      }
+
                       promptProvider.toggleFavorite(prompt.id);
                     },
                   ),
@@ -386,20 +628,38 @@ class _PromptsScreenState extends State<PromptsScreen>
                   color:
                       Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
                 ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'By ${prompt.authorName}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  Expanded(
+                    child: Text(
+                      'By ${prompt.userName}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  const SizedBox(width: 8),
                   ElevatedButton(
                     onPressed: () {
+                      // Check if the prompt has a valid ID before incrementing usage count
+                      if (prompt.id.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Cannot use: Prompt has no valid ID'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                        return;
+                      }
+
                       // Use the prompt in chat
                       promptProvider.incrementUsageCount(prompt.id);
                       ScaffoldMessenger.of(context).showSnackBar(

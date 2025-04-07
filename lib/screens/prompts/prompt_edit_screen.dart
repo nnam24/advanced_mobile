@@ -17,73 +17,140 @@ class _PromptEditScreenState extends State<PromptEditScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _titleController;
   late TextEditingController _contentController;
+  late TextEditingController _descriptionController;
   late PromptCategory _selectedCategory;
-  late PromptVisibility _selectedVisibility;
+  late bool _isPublic;
   late bool _isFavorite;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
     _titleController = TextEditingController(text: widget.prompt.title);
     _contentController = TextEditingController(text: widget.prompt.content);
+    _descriptionController =
+        TextEditingController(text: widget.prompt.description ?? '');
     _selectedCategory = widget.prompt.category;
-    _selectedVisibility = widget.prompt.visibility;
+    _isPublic = widget.prompt.isPublic;
     _isFavorite = widget.prompt.isFavorite;
+
+    // Validate that we have a valid prompt ID
+    if (widget.prompt.id.isEmpty) {
+      // Schedule this after the build is complete
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content:
+                  Text('Error: Invalid prompt ID. Cannot edit this prompt.'),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
+    _descriptionController.dispose();
     super.dispose();
   }
 
   Future<void> _updatePrompt() async {
+    // First check if we have a valid ID
+    if (widget.prompt.id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: Cannot update prompt with empty ID'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     if (_formKey.currentState!.validate()) {
       final promptProvider =
           Provider.of<PromptProvider>(context, listen: false);
 
-      final updatedPrompt = widget.prompt.copyWith(
-        title: _titleController.text.trim(),
-        content: _contentController.text.trim(),
-        category: _selectedCategory,
-        visibility: _selectedVisibility,
-        updatedAt: DateTime.now(),
-        isFavorite: _isFavorite,
-      );
+      // Set loading state
+      setState(() {
+        _isLoading = true;
+      });
 
-      final success = await promptProvider.updatePrompt(updatedPrompt);
+      try {
+        final updatedPrompt = widget.prompt.copyWith(
+          id: widget.prompt.id, // Explicitly include the ID
+          title: _titleController.text.trim(),
+          content: _contentController.text.trim(),
+          description: _descriptionController.text.trim().isEmpty
+              ? null
+              : _descriptionController.text.trim(),
+          category: _selectedCategory,
+          isPublic: _isPublic,
+          updatedAt: DateTime.now(),
+          isFavorite: _isFavorite,
+        );
 
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Prompt updated successfully'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        Navigator.pop(context);
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update prompt: ${promptProvider.error}'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        // Debug log to check the ID
+        print('Updating prompt with ID: ${updatedPrompt.id}');
+
+        final success = await promptProvider.updatePrompt(updatedPrompt);
+
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+
+        if (success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Prompt updated successfully'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+
+          // Return to previous screen
+          Navigator.pop(context, true);
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update prompt: ${promptProvider.error}'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $e'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final promptProvider = Provider.of<PromptProvider>(context);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Prompt'),
         actions: [
           TextButton(
-            onPressed: promptProvider.isLoading ? null : _updatePrompt,
-            child: promptProvider.isLoading
+            onPressed:
+                (_isLoading || widget.prompt.id.isEmpty) ? null : _updatePrompt,
+            child: _isLoading
                 ? const SizedBox(
                     height: 20,
                     width: 20,
@@ -106,6 +173,30 @@ class _PromptEditScreenState extends State<PromptEditScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Display prompt ID for debugging
+                  if (widget.prompt.id.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.warning, color: Colors.red),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Warning: This prompt has no ID and cannot be updated. Please go back and try again.',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   // Title field
                   TextFormField(
                     controller: _titleController,
@@ -159,6 +250,41 @@ class _PromptEditScreenState extends State<PromptEditScreen> {
                         }
                         return null;
                       },
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Description field
+                  Text(
+                    'Description (Optional)',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline
+                            .withOpacity(0.5),
+                      ),
+                    ),
+                    child: TextFormField(
+                      controller: _descriptionController,
+                      decoration: const InputDecoration(
+                        hintText:
+                            'Enter a description for this prompt (optional)',
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.all(16),
+                      ),
+                      maxLines: 3,
                     ),
                   ),
 
@@ -245,23 +371,23 @@ class _PromptEditScreenState extends State<PromptEditScreen> {
                         ListTile(
                           title: const Text('Visibility'),
                           subtitle: const Text('Who can see this prompt'),
-                          trailing: SegmentedButton<PromptVisibility>(
+                          trailing: SegmentedButton<bool>(
                             segments: const [
-                              ButtonSegment<PromptVisibility>(
-                                value: PromptVisibility.private,
+                              ButtonSegment<bool>(
+                                value: false,
                                 label: Text('Private'),
                                 icon: Icon(Icons.lock),
                               ),
-                              ButtonSegment<PromptVisibility>(
-                                value: PromptVisibility.public,
+                              ButtonSegment<bool>(
+                                value: true,
                                 label: Text('Public'),
                                 icon: Icon(Icons.public),
                               ),
                             ],
-                            selected: {_selectedVisibility},
+                            selected: {_isPublic},
                             onSelectionChanged: (newSelection) {
                               setState(() {
-                                _selectedVisibility = newSelection.first;
+                                _isPublic = newSelection.first;
                               });
                             },
                           ),
@@ -292,12 +418,13 @@ class _PromptEditScreenState extends State<PromptEditScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed:
-                          promptProvider.isLoading ? null : _updatePrompt,
+                      onPressed: (_isLoading || widget.prompt.id.isEmpty)
+                          ? null
+                          : _updatePrompt,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: promptProvider.isLoading
+                      child: _isLoading
                           ? const SizedBox(
                               height: 20,
                               width: 20,

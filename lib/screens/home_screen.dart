@@ -17,6 +17,7 @@ import 'knowledge/knowledge_list_screen.dart';
 import 'prompts/prompts_screen.dart';
 import 'email/email_compose_screen.dart';
 import 'package:flutter/services.dart';
+import 'prompts/prompt_create_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -291,7 +292,7 @@ class _HomeScreenState extends State<HomeScreen>
                                     .colorScheme
                                     .primaryContainer,
                                 child: Icon(
-                                  _getCategoryIcon(prompt.category),
+                                  Prompt.getCategoryIcon(prompt.category),
                                   size: 16,
                                   color: Theme.of(context)
                                       .colorScheme
@@ -343,25 +344,6 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       ),
     );
-  }
-
-  IconData _getCategoryIcon(PromptCategory category) {
-    switch (category) {
-      case PromptCategory.general:
-        return Icons.lightbulb_outline;
-      case PromptCategory.coding:
-        return Icons.code;
-      case PromptCategory.business:
-        return Icons.business;
-      case PromptCategory.creative:
-        return Icons.brush;
-      case PromptCategory.academic:
-        return Icons.school;
-      case PromptCategory.personal:
-        return Icons.person;
-      default:
-        return Icons.auto_awesome;
-    }
   }
 
   void _insertPrompt(Prompt prompt) {
@@ -585,7 +567,7 @@ class _HomeScreenState extends State<HomeScreen>
                     return Padding(
                       padding: const EdgeInsets.only(right: 8.0),
                       child: FilterChip(
-                        label: Text(_getCategoryName(category)),
+                        label: Text(Prompt.getCategoryName(category)),
                         selected: promptProvider.selectedCategory == category,
                         onSelected: (selected) {
                           promptProvider
@@ -635,7 +617,7 @@ class _HomeScreenState extends State<HomeScreen>
                                   .colorScheme
                                   .primaryContainer,
                               child: Icon(
-                                _getCategoryIcon(prompt.category),
+                                Prompt.getCategoryIcon(prompt.category),
                                 color: Theme.of(context)
                                     .colorScheme
                                     .onPrimaryContainer,
@@ -684,25 +666,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  String _getCategoryName(PromptCategory category) {
-    switch (category) {
-      case PromptCategory.general:
-        return 'General';
-      case PromptCategory.coding:
-        return 'Coding';
-      case PromptCategory.business:
-        return 'Business';
-      case PromptCategory.creative:
-        return 'Creative';
-      case PromptCategory.academic:
-        return 'Academic';
-      case PromptCategory.personal:
-        return 'Personal';
-      default:
-        return 'Unknown';
-    }
-  }
-
   void _usePrompt(Prompt prompt) {
     // Increment usage count
     final promptProvider = Provider.of<PromptProvider>(context, listen: false);
@@ -725,6 +688,16 @@ class _HomeScreenState extends State<HomeScreen>
         content: Text('Prompt "${prompt.title}" inserted'),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // Add this method to the _HomeScreenState class to navigate to the PromptCreateScreen
+  void _navigateToCreatePrompt() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PromptCreateScreen(),
       ),
     );
   }
@@ -803,7 +776,8 @@ class _HomeScreenState extends State<HomeScreen>
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         ),
                         SizedBox(width: 16),
@@ -822,8 +796,9 @@ class _HomeScreenState extends State<HomeScreen>
                   // Navigate to login screen after successful logout
                   if (context.mounted) {
                     Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (context) => const LoginScreen()),
-                          (route) => false, // This removes all previous routes
+                      MaterialPageRoute(
+                          builder: (context) => const LoginScreen()),
+                      (route) => false, // This removes all previous routes
                     );
                   }
                 } catch (e) {
@@ -1088,47 +1063,55 @@ class _HomeScreenState extends State<HomeScreen>
                             },
                           ),
                           Expanded(
-                            child: TextField(
-                              controller: _messageController,
-                              focusNode: _messageFocusNode,
-                              decoration: InputDecoration(
-                                hintText: chatProvider.hasTokens
-                                    ? 'Type a message or "/" for prompts...'
-                                    : 'Out of tokens. Upgrade your plan.',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(24),
-                                  borderSide: BorderSide.none,
-                                ),
-                                filled: true,
-                                fillColor: isDarkMode
-                                    ? Colors.grey.shade800
-                                    : Colors.grey.shade200,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                                suffixIcon: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.auto_awesome),
-                                      tooltip: 'Browse prompts',
-                                      onPressed: _showPromptSelector,
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.mic),
-                                      tooltip: 'Voice input',
-                                      onPressed: () {
-                                        // Voice input functionality would go here
-                                      },
-                                    ),
-                                  ],
-                                ),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minHeight: 40,
+                                maxHeight: 120,
                               ),
-                              maxLines: null,
-                              textInputAction: TextInputAction.send,
-                              onSubmitted: (_) => _sendMessage(),
-                              enabled: chatProvider.hasTokens,
+                              child: TextField(
+                                controller: _messageController,
+                                focusNode: _messageFocusNode,
+                                decoration: InputDecoration(
+                                  hintText: chatProvider.hasTokens
+                                      ? 'Type a message or "/" for prompts...'
+                                      : 'Out of tokens. Upgrade your plan.',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  filled: true,
+                                  fillColor: isDarkMode
+                                      ? Colors.grey.shade800
+                                      : Colors.grey.shade200,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  suffixIcon: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.auto_awesome),
+                                        tooltip: 'Browse prompts',
+                                        onPressed: _showPromptSelector,
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.mic),
+                                        tooltip: 'Voice input',
+                                        onPressed: () {
+                                          // Voice input functionality would go here
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                maxLines: null,
+                                minLines: 1,
+                                textInputAction: TextInputAction.newline,
+                                keyboardType: TextInputType.multiline,
+                                onSubmitted: (_) => _sendMessage(),
+                                enabled: chatProvider.hasTokens,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),

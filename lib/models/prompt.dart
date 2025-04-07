@@ -1,70 +1,79 @@
 import 'package:flutter/material.dart';
 
 enum PromptCategory {
-  general,
-  writing,
-  coding,
   business,
-  creative,
-  academic,
-  personal,
+  career,
+  chatbot,
+  coding,
+  education,
+  fun,
+  marketing,
+  productivity,
+  seo,
+  writing,
   other
 }
-
-enum PromptVisibility { public, private }
 
 class Prompt {
   final String id;
   final String title;
   final String content;
+  final String? description;
   final PromptCategory category;
-  final PromptVisibility visibility;
-  final String authorId;
-  final String authorName;
+  final bool isPublic;
+  final String userId;
+  final String userName;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final int usageCount;
+  final String language;
   final bool isFavorite;
+  final int usageCount; // This might not be in the API, keeping for UI
 
   Prompt({
     required this.id,
     required this.title,
     required this.content,
+    this.description,
     required this.category,
-    required this.visibility,
-    required this.authorId,
-    required this.authorName,
+    required this.isPublic,
+    required this.userId,
+    required this.userName,
     required this.createdAt,
     required this.updatedAt,
-    this.usageCount = 0,
+    required this.language,
     this.isFavorite = false,
+    this.usageCount = 0,
   });
 
   Prompt copyWith({
     String? id,
     String? title,
     String? content,
+    String? description,
     PromptCategory? category,
-    PromptVisibility? visibility,
-    String? authorId,
-    String? authorName,
+    bool? isPublic,
+    String? userId,
+    String? userName,
     DateTime? createdAt,
     DateTime? updatedAt,
-    int? usageCount,
+    String? language,
     bool? isFavorite,
+    int? usageCount,
   }) {
     return Prompt(
       id: id ?? this.id,
       title: title ?? this.title,
       content: content ?? this.content,
+      description: description ?? this.description,
       category: category ?? this.category,
-      visibility: visibility ?? this.visibility,
-      authorId: authorId ?? this.authorId,
-      authorName: authorName ?? this.authorName,
+      isPublic: isPublic ?? this.isPublic,
+      userId: userId ?? this.userId,
+      userName: userName ?? this.userName,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      usageCount: usageCount ?? this.usageCount,
+      language: language ?? this.language,
       isFavorite: isFavorite ?? this.isFavorite,
+      usageCount: usageCount ?? this.usageCount,
     );
   }
 
@@ -73,94 +82,112 @@ class Prompt {
       id: '',
       title: '',
       content: '',
-      category: PromptCategory.general,
-      visibility: PromptVisibility.private,
-      authorId: '',
-      authorName: '',
+      description: '',
+      category: PromptCategory.other,
+      isPublic: false,
+      userId: '',
+      userName: '',
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
+      language: 'English',
     );
   }
 
+  // Update the toJson method to match the API documentation
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
       'title': title,
       'content': content,
+      'description': description,
       'category': category.toString().split('.').last,
-      'visibility': visibility.toString().split('.').last,
-      'authorId': authorId,
-      'authorName': authorName,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
-      'usageCount': usageCount,
-      'isFavorite': isFavorite,
+      'isPublic': isPublic,
+      'language': language,
+      // Only include these fields if they're not empty/null and needed for updates
+      if (id.isNotEmpty) 'id': id,
+      if (userId.isNotEmpty) 'userId': userId,
+      if (userName.isNotEmpty) 'userName': userName,
     };
   }
 
   factory Prompt.fromJson(Map<String, dynamic> json) {
+    // Handle MongoDB-style _id field
+    String promptId = '';
+    if (json.containsKey('id')) {
+      promptId = json['id'] ?? '';
+    } else if (json.containsKey('_id')) {
+      promptId = json['_id'] ?? '';
+    }
+
     return Prompt(
-      id: json['id'] ?? '',
+      id: promptId,
       title: json['title'] ?? '',
       content: json['content'] ?? '',
-      category: _categoryFromString(json['category'] ?? 'general'),
-      visibility: _visibilityFromString(json['visibility'] ?? 'private'),
-      authorId: json['authorId'] ?? '',
-      authorName: json['authorName'] ?? '',
+      description: json['description'],
+      category: _categoryFromString(json['category'] ?? 'other'),
+      isPublic: json['isPublic'] ?? false,
+      userId: json['userId'] ?? '',
+      userName: json['userName'] ?? '',
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : DateTime.now(),
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt'])
           : DateTime.now(),
-      usageCount: json['usageCount'] ?? 0,
+      language: json['language'] ?? 'English',
       isFavorite: json['isFavorite'] ?? false,
+      usageCount: 0, // This might not be in the API response
     );
   }
 
   static PromptCategory _categoryFromString(String category) {
     switch (category) {
-      case 'writing':
-        return PromptCategory.writing;
-      case 'coding':
-        return PromptCategory.coding;
       case 'business':
         return PromptCategory.business;
-      case 'creative':
-        return PromptCategory.creative;
-      case 'academic':
-        return PromptCategory.academic;
-      case 'personal':
-        return PromptCategory.personal;
-      case 'other':
-        return PromptCategory.other;
+      case 'career':
+        return PromptCategory.career;
+      case 'chatbot':
+        return PromptCategory.chatbot;
+      case 'coding':
+        return PromptCategory.coding;
+      case 'education':
+        return PromptCategory.education;
+      case 'fun':
+        return PromptCategory.fun;
+      case 'marketing':
+        return PromptCategory.marketing;
+      case 'productivity':
+        return PromptCategory.productivity;
+      case 'seo':
+        return PromptCategory.seo;
+      case 'writing':
+        return PromptCategory.writing;
       default:
-        return PromptCategory.general;
+        return PromptCategory.other;
     }
-  }
-
-  static PromptVisibility _visibilityFromString(String visibility) {
-    return visibility == 'public'
-        ? PromptVisibility.public
-        : PromptVisibility.private;
   }
 
   static String getCategoryName(PromptCategory category) {
     switch (category) {
-      case PromptCategory.general:
-        return 'General';
-      case PromptCategory.writing:
-        return 'Writing';
-      case PromptCategory.coding:
-        return 'Coding';
       case PromptCategory.business:
         return 'Business';
-      case PromptCategory.creative:
-        return 'Creative';
-      case PromptCategory.academic:
-        return 'Academic';
-      case PromptCategory.personal:
-        return 'Personal';
+      case PromptCategory.career:
+        return 'Career';
+      case PromptCategory.chatbot:
+        return 'Chatbot';
+      case PromptCategory.coding:
+        return 'Coding';
+      case PromptCategory.education:
+        return 'Education';
+      case PromptCategory.fun:
+        return 'Fun';
+      case PromptCategory.marketing:
+        return 'Marketing';
+      case PromptCategory.productivity:
+        return 'Productivity';
+      case PromptCategory.seo:
+        return 'SEO';
+      case PromptCategory.writing:
+        return 'Writing';
       case PromptCategory.other:
         return 'Other';
     }
@@ -168,20 +195,26 @@ class Prompt {
 
   static IconData getCategoryIcon(PromptCategory category) {
     switch (category) {
-      case PromptCategory.general:
-        return Icons.all_inclusive;
-      case PromptCategory.writing:
-        return Icons.edit_note;
-      case PromptCategory.coding:
-        return Icons.code;
       case PromptCategory.business:
         return Icons.business;
-      case PromptCategory.creative:
-        return Icons.brush;
-      case PromptCategory.academic:
+      case PromptCategory.career:
+        return Icons.work;
+      case PromptCategory.chatbot:
+        return Icons.chat;
+      case PromptCategory.coding:
+        return Icons.code;
+      case PromptCategory.education:
         return Icons.school;
-      case PromptCategory.personal:
-        return Icons.person;
+      case PromptCategory.fun:
+        return Icons.emoji_emotions;
+      case PromptCategory.marketing:
+        return Icons.trending_up;
+      case PromptCategory.productivity:
+        return Icons.schedule;
+      case PromptCategory.seo:
+        return Icons.search;
+      case PromptCategory.writing:
+        return Icons.edit_note;
       case PromptCategory.other:
         return Icons.more_horiz;
     }
