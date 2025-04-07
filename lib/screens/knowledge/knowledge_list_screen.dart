@@ -890,6 +890,7 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
                       ),
                     ),
                   );
+
                 }
               } catch (e) {
                 if (mounted) {
