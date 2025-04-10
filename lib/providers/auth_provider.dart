@@ -421,7 +421,6 @@ class AuthProvider extends ChangeNotifier {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         _token = responseData['access_token'];
-        _refreshToken = responseData['refresh_token'];
 
         // Update token expiry time (10 minutes from now)
         _tokenExpiryTime = DateTime.now().add(const Duration(minutes: 10));
@@ -429,7 +428,6 @@ class AuthProvider extends ChangeNotifier {
         // Update stored tokens
         final prefs = await SharedPreferences.getInstance();
         prefs.setString('access_token', _token!);
-        prefs.setString('refresh_token', _refreshToken!);
         prefs.setString('token_expiry', _tokenExpiryTime!.toIso8601String());
 
         // Reset the timer for the next refresh
