@@ -40,18 +40,21 @@ class PromptService {
         'limit': limit.toString(),
       };
 
+      // Use query parameter for search (prioritize query over search)
       if (query != null && query.isNotEmpty) {
         queryParams['query'] = query;
-      }
-
-      if (search != null && search.isNotEmpty) {
-        queryParams['search'] = search;
+        print('Searching with query: $query');
+      } else if (search != null && search.isNotEmpty) {
+        // Fallback to search parameter for backward compatibility
+        queryParams['query'] = search; // Use 'query' instead of 'search'
+        print('Searching with search (converted to query): $search');
       }
 
       if (category != null) {
         queryParams['category'] = category;
       }
 
+      // Only add isPublic parameter if it's not null
       if (isPublic != null) {
         queryParams['isPublic'] = isPublic.toString();
       }
@@ -60,6 +63,8 @@ class PromptService {
       final uri = Uri.parse('$baseUrl$promptsEndpoint').replace(
         queryParameters: queryParams,
       );
+
+      print('API request URL: ${uri.toString()}');
 
       // Get headers
       final headers = await _getHeaders();
