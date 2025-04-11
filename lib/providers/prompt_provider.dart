@@ -99,7 +99,7 @@ class PromptProvider with ChangeNotifier {
     refreshPrompts();
   }
 
-  // Set the search query
+  // Modify the setSearchQuery method to use the correct parameter name
   void setSearchQuery(String query) {
     _searchQuery = query.isEmpty ? null : query;
     refreshPrompts();
@@ -112,6 +112,7 @@ class PromptProvider with ChangeNotifier {
     await fetchPrompts(isPublic: _isPublicFilter);
   }
 
+  // Update the fetchPrompts method to use 'query' parameter instead of 'search'
   Future<void> fetchPrompts({
     bool? isPublic,
     String? category,
@@ -141,7 +142,8 @@ class PromptProvider with ChangeNotifier {
       _isPublicFilter = isPublic;
     }
 
-    print('Fetching prompts with isPublic: $_isPublicFilter, offset: $_offset');
+    print(
+        'Fetching prompts with isPublic: ${isPublic != null ? isPublic : "not specified (all)"}, offset: $_offset');
 
     _isLoading = true;
     _error = null;
@@ -151,13 +153,14 @@ class PromptProvider with ChangeNotifier {
       final categoryValue = _selectedCategory?.toString().split('.').last;
 
       print(
-          'API request: isPublic=$_isPublicFilter, category=$categoryValue, search=$_searchQuery, offset=$_offset');
+          'API request: isPublic=${isPublic != null ? isPublic : "not specified"}, category=$categoryValue, query=$_searchQuery, offset=$_offset');
 
       final response = await _promptService.getPrompts(
         offset: _offset,
         category: categoryValue,
-        search: _searchQuery,
-        isPublic: _isPublicFilter,
+        query: _searchQuery, // Use query parameter instead of search
+        isPublic:
+            isPublic, // Pass the isPublic parameter as is, which might be null
       );
 
       // Filter out prompts with empty IDs
