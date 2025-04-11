@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/prompt_provider.dart';
@@ -27,6 +28,9 @@ class _PromptsScreenState extends State<PromptsScreen>
   bool _isInitialized = false;
   // Add this flag to track if we've already triggered a favorites fetch
   bool _favoritesFetchTriggered = false;
+
+  // Add a timer for search debouncing
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -70,7 +74,7 @@ class _PromptsScreenState extends State<PromptsScreen>
     _isInitialized = true;
   }
 
-// Modify the _onTabChanged method to be more efficient and reliable
+  // Modify the _onTabChanged method to be more efficient and reliable
   void _onTabChanged() {
     if (!_tabController.indexIsChanging) {
       final promptProvider =
@@ -129,8 +133,26 @@ class _PromptsScreenState extends State<PromptsScreen>
     }
   }
 
+  // Add a debounced search method
+  void _performSearch(String query) {
+    // Cancel previous timer if it exists
+    if (_searchDebounce?.isActive ?? false) {
+      _searchDebounce!.cancel();
+    }
+
+    // Set a new timer to delay the search
+    _searchDebounce = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        print('Performing search with query: $query');
+        Provider.of<PromptProvider>(context, listen: false)
+            .setSearchQuery(query);
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
@@ -173,9 +195,7 @@ class _PromptsScreenState extends State<PromptsScreen>
                                 icon: const Icon(Icons.clear),
                                 onPressed: () {
                                   _searchController.clear();
-                                  Provider.of<PromptProvider>(context,
-                                          listen: false)
-                                      .setSearchQuery('');
+                                  _performSearch(''); // Clear search
                                 },
                               )
                             : null,
@@ -183,7 +203,13 @@ class _PromptsScreenState extends State<PromptsScreen>
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      onChanged: (value) {
+                      onChanged: _performSearch, // Use debounced search
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (value) {
+                        // Immediately search when user presses enter
+                        if (_searchDebounce?.isActive ?? false) {
+                          _searchDebounce!.cancel();
+                        }
                         Provider.of<PromptProvider>(context, listen: false)
                             .setSearchQuery(value);
                       },
@@ -289,7 +315,7 @@ class _PromptsScreenState extends State<PromptsScreen>
     );
   }
 
-// Modify the _buildPromptList method to handle loading states better
+  // Modify the _buildPromptList method to handle loading states better
   Widget _buildPromptList(BuildContext context, bool isPublic) {
     return Consumer<PromptProvider>(
       builder: (context, promptProvider, child) {
@@ -349,7 +375,7 @@ class _PromptsScreenState extends State<PromptsScreen>
     );
   }
 
-// Modify the _buildFavoritesList method to prevent infinite loading when there are no favorites
+  // Modify the _buildFavoritesList method to prevent infinite loading when there are no favorites
   Widget _buildFavoritesList(BuildContext context) {
     return Consumer<PromptProvider>(
       builder: (context, promptProvider, child) {
