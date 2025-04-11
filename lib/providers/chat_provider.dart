@@ -939,6 +939,9 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, int> _tokenCountCache = {};
 
   int _estimateTokenCount(String text) {
+    // temporarily return 1
+    return 1;
+
     // Check cache first
     if (_tokenCountCache.containsKey(text)) {
       return _tokenCountCache[text]!;
