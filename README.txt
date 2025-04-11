@@ -42,6 +42,15 @@
    for Milestone 1. It showcases the user interface, navigation flow, and key
    features implemented in this phase of development.
 
+🔷 YOUTUBE DEMO VIDEO (MILESTONE 2) 🔷
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📌 Link: https://youtu.be/JFa60vW_n-s
+
+📝 Description:
+   This video demonstrates the core functionality of the Jarvis AI application
+   for Milestone 2. It showcases the authentication, ai-chat, prompt functionalities and 
+   management features.
+
 
 ✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨
 
