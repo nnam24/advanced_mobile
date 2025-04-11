@@ -81,7 +81,7 @@ class ChatProvider extends ChangeNotifier {
 
   ChatProvider() {
     _initializeData();
-    _startTokenDecayTimer();
+    //_startTokenDecayTimer();
   }
 
   @override
