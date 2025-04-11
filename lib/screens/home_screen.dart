@@ -544,13 +544,17 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
+  // Fixed method to show prompt selector
   void _showPromptSelector() {
     final promptProvider = Provider.of<PromptProvider>(context, listen: false);
 
-    // If prompts are empty and not already loading, fetch them
-    if (promptProvider.prompts.isEmpty && !promptProvider.isLoading) {
-      promptProvider.fetchPrompts(isPublic: true, refresh: true);
-    }
+    // Reset any filters that might be applied
+    promptProvider.setSearchQuery('');
+    promptProvider.setCategory(null);
+
+    // Important: Don't set any isPublic filter to get all prompts
+    // Just call fetchPrompts without the isPublic parameter
+    promptProvider.fetchPrompts(refresh: true);
 
     showModalBottomSheet(
       context: context,
@@ -571,6 +575,10 @@ class _HomeScreenState extends State<HomeScreen>
     return Consumer<PromptProvider>(
       builder: (context, promptProvider, _) {
         final prompts = promptProvider.prompts;
+
+        // Debug print to see what's happening
+        print(
+            'Building prompt selector: ${prompts.length} prompts, isPublic filter: ${promptProvider.isPublicFilter}');
 
         // Show loading indicator if prompts are being loaded
         if (promptProvider.isLoading && prompts.isEmpty) {
