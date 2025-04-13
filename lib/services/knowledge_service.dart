@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/knowledge_item.dart';
+import 'package:path/path.dart' as path;
+import 'package:http_parser/http_parser.dart';
 
 class KnowledgeService {
   // Base URL for knowledge API
@@ -213,6 +216,174 @@ class KnowledgeService {
     }
   }
 
+  // Add this function to determine the MIME type based on file extension
+  String getMimeType(String filePath) {
+    final extension = filePath.split('.').last.toLowerCase();
+
+    switch (extension) {
+      case 'c':
+        return 'text/x-c';
+      case 'cpp':
+        return 'text/x-c++';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'html':
+        return 'text/html';
+      case 'java':
+        return 'text/x-java';
+      case 'json':
+        return 'application/json';
+      case 'md':
+        return 'text/markdown';
+      case 'pdf':
+        return 'application/pdf';
+      case 'php':
+        return 'text/x-php';
+      case 'pptx':
+        return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      case 'py':
+        return 'text/x-python'; // or 'text/x-script.python'
+      case 'rb':
+        return 'text/x-ruby';
+      case 'tex':
+        return 'text/x-tex';
+      case 'txt':
+        return 'text/plain';
+      default:
+        return 'application/octet-stream'; // Default binary data
+    }
+  }
+
+  // Upload a file to a knowledge item - updated to match JavaScript approach
+  Future<bool> uploadFileToKnowledge(String knowledgeId, File file) async {
+    final token = await _getAuthToken();
+    final userGuid = await _getUserGuid();
+
+    if (token == null) {
+      throw Exception('Authentication token not found. Please login again.');
+    }
+
+    if (userGuid == null) {
+      throw Exception('User GUID not found.');
+    }
+
+    try {
+      // Get the file name from the path
+      final fileName = path.basename(file.path);
+      final mimeType = getMimeType(fileName);
+
+      print('Uploading file: $fileName with MIME type: $mimeType');
+
+      // Create multipart request
+      final uri = Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/local-file');
+      print('Upload URI: $uri');
+
+      // Create a multipart request
+      final request = http.MultipartRequest('POST', uri);
+
+      // Add headers
+      request.headers['x-jarvis-guid'] = userGuid;
+      request.headers['Authorization'] = 'Bearer $token';
+
+      // Add file to the request
+      final fileBytes = await file.readAsBytes();
+      final multipartFile = http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: fileName,
+        contentType: MediaType.parse(mimeType),
+      );
+      request.files.add(multipartFile);
+
+      print('Request headers: ${request.headers}');
+      print('File name: $fileName, size: ${fileBytes.length} bytes, MIME type: $mimeType');
+
+      // Send the request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return true;
+      } else {
+        if (response.body.isNotEmpty) {
+          try {
+            final errorData = json.decode(response.body);
+            throw Exception(errorData['message'] ?? 'Failed to upload file. Status: ${response.statusCode}');
+          } catch (e) {
+            throw Exception('Failed to upload file. Status: ${response.statusCode}, Body: ${response.body}');
+          }
+        }
+        throw Exception('Failed to upload file. Status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error uploading file: $e');
+      throw Exception('Error uploading file: $e');
+    }
+  }
+
+  // Add website knowledge to an existing knowledge item
+  Future<Map<String, dynamic>> addWebsiteKnowledge(String knowledgeId, String unitName, String webUrl) async {
+    final token = await _getAuthToken();
+    final userGuid = await _getUserGuid();
+
+    if (token == null) {
+      throw Exception('Authentication token not found. Please login again.');
+    }
+
+    if (userGuid == null) {
+      throw Exception('User GUID not found.');
+    }
+
+    final headers = {
+      'x-jarvis-guid': userGuid,
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+
+    final body = json.encode({
+      'unitName': unitName,
+      'webUrl': webUrl,
+    });
+
+    try {
+      print('Adding website knowledge: $unitName, URL: $webUrl');
+      final uri = Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/web');
+      print('API endpoint: $uri');
+
+      final response = await http.post(
+        uri,
+        headers: headers,
+        body: body,
+      );
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (response.body.isNotEmpty) {
+          return json.decode(response.body);
+        }
+        return {'success': true};
+      } else {
+        if (response.body.isNotEmpty) {
+          try {
+            final errorData = json.decode(response.body);
+            throw Exception(errorData['message'] ?? 'Failed to add website knowledge. Status: ${response.statusCode}');
+          } catch (e) {
+            throw Exception('Failed to add website knowledge. Status: ${response.statusCode}, Body: ${response.body}');
+          }
+        }
+        throw Exception('Failed to add website knowledge. Status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error adding website knowledge: $e');
+      throw Exception('Error adding website knowledge: $e');
+    }
+  }
+
   // Disable a knowledge item (if different from delete)
   Future<bool> disableKnowledgeItem(String id) async {
     // In this case, the API uses the same DELETE endpoint for both delete and disable
@@ -220,4 +391,3 @@ class KnowledgeService {
     return deleteKnowledgeItem(id);
   }
 }
-
