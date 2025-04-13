@@ -18,7 +18,6 @@ class KnowledgeItem {
     required this.createdAt,
     required this.updatedAt,
     this.userId,
-    this.userId,
   });
 
   KnowledgeItem copyWith({
@@ -30,7 +29,6 @@ class KnowledgeItem {
     DateTime? createdAt,
     DateTime? updatedAt,
     String? userId,
-    String? userId,
   }) {
     return KnowledgeItem(
       id: id ?? this.id,
@@ -40,7 +38,6 @@ class KnowledgeItem {
       fileType: fileType ?? this.fileType,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      userId: userId ?? this.userId,
       userId: userId ?? this.userId,
     );
   }
