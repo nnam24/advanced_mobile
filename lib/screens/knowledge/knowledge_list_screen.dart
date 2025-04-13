@@ -712,7 +712,7 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
                 // Update AIBotService
                 final aiBotService =
                     Provider.of<AIBotService>(context, listen: false);
-                aiBotService.deleteKnowledgeItem(item.id);
+                //aiBotService.deleteKnowledgeItem(item.id);
 
                 if (mounted) {
                   // Clear any existing snackbars
@@ -865,7 +865,7 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
                 // Update AIBotService
                 final aiBotService =
                     Provider.of<AIBotService>(context, listen: false);
-                aiBotService.deleteKnowledgeItem(item.id);
+                //aiBotService.deleteKnowledgeItem(item.id);
 
                 if (mounted) {
                   // Clear any existing snackbars
