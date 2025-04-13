@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +12,11 @@ class AuthProvider extends ChangeNotifier {
   bool _isAuthenticated = false;
   String? _token;
   String? _refreshToken;
+  DateTime? _tokenExpiryTime;
+  Timer? _tokenRefreshTimer;
+
+  // Session expiration callback
+  Function(String reason)? onSessionExpired;
 
   // Getters
   User? get currentUser => _currentUser;
@@ -64,6 +70,9 @@ class AuthProvider extends ChangeNotifier {
         _token = responseData['access_token'];
         _refreshToken = responseData['refresh_token'];
 
+        // Set token expiry time (10 minutes from now)
+        _tokenExpiryTime = DateTime.now().add(const Duration(minutes: 10));
+
         // Create user from response data
         final userData = responseData['user'] ?? {};
         _currentUser = User(
@@ -84,8 +93,12 @@ class AuthProvider extends ChangeNotifier {
         final prefs = await SharedPreferences.getInstance();
         prefs.setString('access_token', _token!);
         prefs.setString('refresh_token', _refreshToken!);
+        prefs.setString('token_expiry', _tokenExpiryTime!.toIso8601String());
         prefs.setString('user_email', email);
         prefs.setString('user_name', _currentUser!.name);
+
+        // Start token refresh timer
+        _setupTokenRefreshTimer();
 
         _isLoading = false;
         notifyListeners();
@@ -165,6 +178,13 @@ class AuthProvider extends ChangeNotifier {
         createdAt: DateTime.now(),
       );
       _isAuthenticated = true;
+
+      // Set token expiry time (10 minutes from now)
+      _tokenExpiryTime = DateTime.now().add(const Duration(minutes: 10));
+
+      // Start token refresh timer
+      _setupTokenRefreshTimer();
+
       _isLoading = false;
       notifyListeners();
       return true;
@@ -197,6 +217,13 @@ class AuthProvider extends ChangeNotifier {
         createdAt: DateTime.now(),
       );
       _isAuthenticated = true;
+
+      // Set token expiry time (10 minutes from now)
+      _tokenExpiryTime = DateTime.now().add(const Duration(minutes: 10));
+
+      // Start token refresh timer
+      _setupTokenRefreshTimer();
+
       _isLoading = false;
       notifyListeners();
       return true;
@@ -238,10 +265,13 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // Logout
-  Future<void> logout() async {
+  Future<void> logout({String reason = ''}) async {
     try {
       _isLoading = true;
       notifyListeners();
+
+      // Cancel token refresh timer
+      _cancelTokenRefreshTimer();
 
       if (_token != null && _refreshToken != null) {
         final headers = Map<String, String>.from(baseHeaders);
@@ -252,6 +282,7 @@ class AuthProvider extends ChangeNotifier {
           await http.delete(
             Uri.parse('$authApiBaseUrl/sessions/current'),
             headers: headers,
+            body: jsonEncode({}),
           );
         } catch (e) {
           print('API logout error: $e');
@@ -262,6 +293,7 @@ class AuthProvider extends ChangeNotifier {
       // Clear data regardless of API response
       _token = null;
       _refreshToken = null;
+      _tokenExpiryTime = null;
       _currentUser = null;
       _isAuthenticated = false;
 
@@ -269,6 +301,7 @@ class AuthProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('access_token');
       await prefs.remove('refresh_token');
+      await prefs.remove('token_expiry');
       await prefs.remove('user_email');
       await prefs.remove('user_name');
       await prefs.remove('user_id');
@@ -279,12 +312,14 @@ class AuthProvider extends ChangeNotifier {
       // Even if there's an error, we should still clear local data
       _token = null;
       _refreshToken = null;
+      _tokenExpiryTime = null;
       _currentUser = null;
       _isAuthenticated = false;
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('access_token');
       await prefs.remove('refresh_token');
+      await prefs.remove('token_expiry');
       await prefs.remove('user_email');
       await prefs.remove('user_name');
       await prefs.remove('user_id');
@@ -372,45 +407,71 @@ class AuthProvider extends ChangeNotifier {
     }
 
     try {
+      debugPrint('Refreshing token at ${DateTime.now()}');
       final headers = Map<String, String>.from(baseHeaders);
       headers['X-Stack-Refresh-Token'] = _refreshToken!;
 
       final response = await http.post(
         Uri.parse('$authApiBaseUrl/sessions/current/refresh'),
         headers: headers,
+        body: jsonEncode({}),
       );
 
       final responseData = jsonDecode(response.body);
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         _token = responseData['access_token'];
-        _refreshToken = responseData['refresh_token'];
+
+        // Update token expiry time (10 minutes from now)
+        _tokenExpiryTime = DateTime.now().add(const Duration(minutes: 10));
 
         // Update stored tokens
         final prefs = await SharedPreferences.getInstance();
         prefs.setString('access_token', _token!);
-        prefs.setString('refresh_token', _refreshToken!);
+        prefs.setString('token_expiry', _tokenExpiryTime!.toIso8601String());
 
+        // Reset the timer for the next refresh
+        _setupTokenRefreshTimer();
+
+        debugPrint('Token refreshed successfully at ${DateTime.now()}');
         notifyListeners();
         return true;
       } else {
+        // Token refresh failed - session might be expired
+        debugPrint('Token refresh failed at ${DateTime.now()}');
+        await _handleSessionExpiration('Your session has expired. Please login again.');
         return false;
       }
     } catch (e) {
+      // Handle network or other errors
+      debugPrint('Token refresh error at ${DateTime.now()}: $e');
+      await _handleSessionExpiration('Failed to refresh authentication. Please login again.');
       return false;
     }
   }
 
   // Try to auto-login from stored tokens
   Future<bool> tryAutoLogin() async {
+    debugPrint('Attempting auto-login');
+
     final prefs = await SharedPreferences.getInstance();
 
     if (!prefs.containsKey('access_token') || !prefs.containsKey('refresh_token')) {
+      debugPrint('No stored tokens found');
       return false;
     }
 
     _token = prefs.getString('access_token');
     _refreshToken = prefs.getString('refresh_token');
+
+    // Get token expiry time
+    final expiryString = prefs.getString('token_expiry');
+    if (expiryString != null) {
+      _tokenExpiryTime = DateTime.parse(expiryString);
+    } else {
+      // If no expiry time is stored, set it to 10 minutes from now
+      _tokenExpiryTime = DateTime.now().add(const Duration(minutes: 10));
+    }
 
     // Create user from stored data
     final email = prefs.getString('user_email');
@@ -427,21 +488,91 @@ class AuthProvider extends ChangeNotifier {
         createdAt: DateTime.now(),
       );
       _isAuthenticated = true;
+
+      debugPrint('Auto-login successful: $_currentUser');
+
+      // Start token refresh timer regardless of token expiry
+      _setupTokenRefreshTimer();
+
       notifyListeners();
-
-      // Optionally refresh the token to ensure it's valid
-      refreshAuthToken();
-
       return true;
     }
 
+    debugPrint('Auto-login failed: user data not found');
     return false;
+  }
+
+  // Set up timer to refresh token every 9 minutes
+  void _setupTokenRefreshTimer() {
+    // Cancel any existing timer
+    _cancelTokenRefreshTimer();
+
+    // Set up timer to refresh token every 9 minutes
+    _tokenRefreshTimer = Timer.periodic(const Duration(minutes: 9), (timer) {
+      debugPrint('Token refresh timer triggered at ${DateTime.now()}');
+      if (_isAuthenticated && _refreshToken != null) {
+        refreshAuthToken();
+      } else {
+        // If not authenticated or no refresh token, cancel the timer
+        _cancelTokenRefreshTimer();
+      }
+    });
+
+    debugPrint('Token refresh timer set up. Next refresh in 9 minutes');
+  }
+
+  // Cancel token refresh timer
+  void _cancelTokenRefreshTimer() {
+    if (_tokenRefreshTimer != null) {
+      _tokenRefreshTimer!.cancel();
+      _tokenRefreshTimer = null;
+      debugPrint('Token refresh timer cancelled');
+    }
+  }
+
+  // Handle session expiration
+  Future<void> _handleSessionExpiration(String reason) async {
+    debugPrint('Handling session expiration: $reason');
+
+    // Cancel token refresh timer
+    _cancelTokenRefreshTimer();
+
+    // Clear authentication data
+    _token = null;
+    _refreshToken = null;
+    _tokenExpiryTime = null;
+    _currentUser = null;
+    _isAuthenticated = false;
+
+    // Clear stored data
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('access_token');
+    await prefs.remove('refresh_token');
+    await prefs.remove('token_expiry');
+
+    // Set error message
+    _error = reason;
+
+    // Notify listeners
+    notifyListeners();
+
+    // Call session expired callback if set
+    if (onSessionExpired != null) {
+      onSessionExpired!(reason);
+    }
   }
 
   // Clear error
   void clearError() {
     _error = '';
     notifyListeners();
+  }
+
+  // Dispose
+  @override
+  void dispose() {
+    _cancelTokenRefreshTimer();
+    super.dispose();
   }
 }
 

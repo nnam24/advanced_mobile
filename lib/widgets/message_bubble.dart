@@ -92,8 +92,8 @@ class MessageBubble extends StatelessWidget {
                   isUser
                       ? 'You'
                       : message.timestamp != null
-                          ? 'Claude 3.5 Sonnet'
-                          : 'Claude 3.5 Sonnet',
+                          ? 'AI assistant'
+                          : 'AI assistant',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,

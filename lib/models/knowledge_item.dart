@@ -7,6 +7,7 @@ class KnowledgeItem {
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? userId;
+  final String? userId;
 
   KnowledgeItem({
     required this.id,
@@ -16,6 +17,7 @@ class KnowledgeItem {
     required this.fileType,
     required this.createdAt,
     required this.updatedAt,
+    this.userId,
     this.userId,
   });
 
@@ -28,6 +30,7 @@ class KnowledgeItem {
     DateTime? createdAt,
     DateTime? updatedAt,
     String? userId,
+    String? userId,
   }) {
     return KnowledgeItem(
       id: id ?? this.id,
@@ -37,6 +40,7 @@ class KnowledgeItem {
       fileType: fileType ?? this.fileType,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      userId: userId ?? this.userId,
       userId: userId ?? this.userId,
     );
   }
@@ -50,6 +54,7 @@ class KnowledgeItem {
       'fileType': fileType,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'userId': userId,
       'userId': userId,
     };
   }
