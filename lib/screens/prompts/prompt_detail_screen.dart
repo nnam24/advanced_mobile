@@ -634,14 +634,14 @@ class _PromptDetailScreenState extends State<PromptDetailScreen> {
 
                 // Only navigate if still mounted
                 if (context.mounted) {
-                  // Navigate to the PromptsScreen and replace the current screen
-                  Navigator.of(context).pushAndRemoveUntil(
+                  // Instead of removing all previous routes, just navigate back to the PromptsScreen
+                  // This preserves the navigation stack and allows going back to the home screen
+                  Navigator.of(context).pushReplacement(
                     MaterialPageRoute(
                       builder: (context) => PromptsScreen(
                         initialTabIndex: tabIndex,
                       ),
                     ),
-                    (route) => false, // Remove all previous routes
                   );
                 }
               } else if (context.mounted) {

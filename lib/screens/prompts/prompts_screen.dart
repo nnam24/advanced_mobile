@@ -6,6 +6,8 @@ import '../../models/prompt.dart';
 import '../../widgets/animated_background.dart';
 import 'prompt_detail_screen.dart';
 import 'prompt_create_screen.dart';
+import '../../screens/home_screen.dart';
+import '../home_screen.dart';
 
 class PromptsScreen extends StatefulWidget {
   final int initialTabIndex;
@@ -165,6 +167,16 @@ class _PromptsScreenState extends State<PromptsScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Prompt Library'),
+        leading: IconButton(
+          icon: const Icon(Icons.home),
+          onPressed: () {
+            // Navigate to the home screen and clear the stack
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+              (route) => false,
+            );
+          },
+        ),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
