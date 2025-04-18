@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/knowledge_item.dart';
+import '../models/knowledge_unit.dart';
 import 'package:path/path.dart' as path;
 import 'package:http_parser/http_parser.dart';
 
@@ -74,6 +75,8 @@ class KnowledgeService {
               ? DateTime.parse(responseData['updatedAt'])
               : DateTime.now(),
           userId: responseData['userId'],
+          numUnits: responseData['numUnits'] ?? 0,
+          totalSize: responseData['totalSize'] ?? 0,
         );
       } else {
         final errorData = json.decode(response.body);
@@ -147,6 +150,8 @@ class KnowledgeService {
                   ? DateTime.parse(item['updatedAt'])
                   : DateTime.now(),
               userId: item['userId'],
+              numUnits: item['numUnits'] ?? 0,
+              totalSize: item['totalSize'] ?? 0,
             ));
           }
         }
@@ -169,6 +174,67 @@ class KnowledgeService {
       }
     } catch (e) {
       throw Exception('Error fetching knowledge items: $e');
+    }
+  }
+
+  // Get knowledge units for a specific knowledge item
+  Future<List<KnowledgeUnit>> getKnowledgeUnits(String knowledgeId, {
+    String? searchQuery,
+    int offset = 0,
+    int limit = 20,
+  }) async {
+    final token = await _getAuthToken();
+    final userGuid = await _getUserGuid();
+
+    if (token == null) {
+      throw Exception('Authentication token not found. Please login again.');
+    }
+
+    if (userGuid == null) {
+      throw Exception('User GUID not found.');
+    }
+
+    final headers = {
+      'Authorization': 'Bearer $token',
+    };
+
+    // Build query parameters
+    final queryParams = {
+      'q': searchQuery,
+      'offset': offset.toString(),
+      'limit': limit.toString(),
+    };
+
+    // Remove null values from query parameters
+    queryParams.removeWhere((key, value) => value == null);
+
+    final uri = Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/units').replace(
+      queryParameters: queryParams,
+    );
+
+    try {
+      print('Fetching knowledge units from: $uri');
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final responseData = json.decode(response.body);
+
+        // Parse knowledge units
+        final List<KnowledgeUnit> units = [];
+        if (responseData['data'] != null) {
+          for (var unit in responseData['data']) {
+            units.add(KnowledgeUnit.fromJson(unit));
+          }
+        }
+
+        return units;
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to fetch knowledge units. Status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching knowledge units: $e');
+      throw Exception('Error fetching knowledge units: $e');
     }
   }
 
@@ -213,6 +279,50 @@ class KnowledgeService {
       }
     } catch (e) {
       throw Exception('Error deleting knowledge item: $e');
+    }
+  }
+
+  // Delete a knowledge unit
+  Future<bool> deleteKnowledgeUnit(String knowledgeId, String unitId) async {
+    final token = await _getAuthToken();
+    final userGuid = await _getUserGuid();
+
+    if (token == null) {
+      throw Exception('Authentication token not found. Please login again.');
+    }
+
+    if (userGuid == null) {
+      throw Exception('User GUID not found.');
+    }
+
+    final headers = {
+      'x-jarvis-guid': userGuid,
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/units/$unitId'),
+        headers: headers,
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        // API returns a boolean value indicating success
+        if (response.body.isNotEmpty) {
+          final result = json.decode(response.body);
+          return result == true;
+        }
+        return true; // If body is empty but status code is success
+      } else {
+        if (response.body.isNotEmpty) {
+          final errorData = json.decode(response.body);
+          throw Exception(errorData['message'] ?? 'Failed to delete knowledge unit. Status: ${response.statusCode}');
+        }
+        throw Exception('Failed to delete knowledge unit. Status: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error deleting knowledge unit: $e');
     }
   }
 
@@ -381,6 +491,150 @@ class KnowledgeService {
     } catch (e) {
       print('Error adding website knowledge: $e');
       throw Exception('Error adding website knowledge: $e');
+    }
+  }
+
+  // Add Slack knowledge to an existing knowledge item
+  Future<Map<String, dynamic>> addSlackKnowledge(
+      String knowledgeId,
+      String unitName,
+      String slackWorkspace,
+      String? slackBotToken
+      ) async {
+    final token = await _getAuthToken();
+    final userGuid = await _getUserGuid();
+
+    if (token == null) {
+      throw Exception('Authentication token not found. Please login again.');
+    }
+
+    if (userGuid == null) {
+      throw Exception('User GUID not found.');
+    }
+
+    final headers = {
+      'x-jarvis-guid': userGuid,
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+
+    // Use provided token if available, otherwise use the hardcoded one
+    final botToken = slackBotToken?.isNotEmpty == true
+        ? slackBotToken
+        : 'xoxb-8061911376167-8767773437328-MQ6JrIBfS8jXcz1vY4z3WRMm';
+
+    final body = json.encode({
+      'unitName': unitName,
+      'slackWorkspace': slackWorkspace,
+      'slackBotToken': botToken,
+    });
+
+    try {
+      print('Adding Slack knowledge: $unitName, Workspace: $slackWorkspace');
+      final uri = Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/slack');
+      print('API endpoint: $uri');
+
+      final response = await http.post(
+        uri,
+        headers: headers,
+        body: body,
+      );
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (response.body.isNotEmpty) {
+          return json.decode(response.body);
+        }
+        return {'success': true};
+      } else {
+        if (response.body.isNotEmpty) {
+          try {
+            final errorData = json.decode(response.body);
+            throw Exception(errorData['message'] ?? 'Failed to add Slack knowledge. Status: ${response.statusCode}');
+          } catch (e) {
+            throw Exception('Failed to add Slack knowledge. Status: ${response.statusCode}, Body: ${response.body}');
+          }
+        }
+        throw Exception('Failed to add Slack knowledge. Status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error adding Slack knowledge: $e');
+      throw Exception('Error adding Slack knowledge: $e');
+    }
+  }
+
+  // Add Confluence knowledge to an existing knowledge item
+  Future<Map<String, dynamic>> addConfluenceKnowledge(
+      String knowledgeId,
+      String unitName,
+      String wikiPageUrl,
+      String confluenceUsername,
+      String? confluenceAccessToken
+      ) async {
+    final token = await _getAuthToken();
+    final userGuid = await _getUserGuid();
+
+    if (token == null) {
+      throw Exception('Authentication token not found. Please login again.');
+    }
+
+    if (userGuid == null) {
+      throw Exception('User GUID not found.');
+    }
+
+    final headers = {
+      'x-jarvis-guid': userGuid,
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+
+    // Use provided token if available, otherwise use the hardcoded one
+    final accessToken = confluenceAccessToken?.isNotEmpty == true
+        ? confluenceAccessToken
+        : 'ATATT3xFfGF0_Vkqx4I1dgD5iql52luGe6bXGX5Ian-N8Tj83rsQuC1c5exdJncxxmhHaGAQfRFUF2com3amuSm5oZNlF57Nh-5eNbMIRT6XeXuUm2U1gtFE8C91_ZGMDscMyNsU6-5OiMZ89PfvCCtbpYhWbgWKon42TqGpJg9wgP64yyNMO6g=EA46C662';
+
+    final body = json.encode({
+      'unitName': unitName,
+      'wikiPageUrl': wikiPageUrl,
+      'confluenceUsername': confluenceUsername,
+      'confluenceAccessToken': accessToken,
+    });
+
+    try {
+      print('Adding Confluence knowledge: $unitName, Wiki URL: $wikiPageUrl');
+      final uri = Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/confluence');
+      print('API endpoint: $uri');
+
+      final response = await http.post(
+        uri,
+        headers: headers,
+        body: body,
+      );
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (response.body.isNotEmpty) {
+          return json.decode(response.body);
+        }
+        return {'success': true};
+      } else {
+        if (response.body.isNotEmpty) {
+          try {
+            final errorData = json.decode(response.body);
+            throw Exception(errorData['message'] ?? 'Failed to add Confluence knowledge. Status: ${response.statusCode}');
+          } catch (e) {
+            throw Exception('Failed to add Confluence knowledge. Status: ${response.statusCode}, Body: ${response.body}');
+          }
+        }
+        throw Exception('Failed to add Confluence knowledge. Status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error adding Confluence knowledge: $e');
+      throw Exception('Error adding Confluence knowledge: $e');
     }
   }
 
