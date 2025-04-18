@@ -42,7 +42,7 @@ class _KnowledgeUploadScreenState extends State<KnowledgeUploadScreen> with Sing
   String? _slackError;
   String? _slackSuccess;
 
-  // Add Confluence knowledge variables
+  // Confluence knowledge variables
   final _confluenceNameController = TextEditingController();
   final _confluenceUrlController = TextEditingController();
   final _confluenceUsernameController = TextEditingController();
@@ -52,10 +52,19 @@ class _KnowledgeUploadScreenState extends State<KnowledgeUploadScreen> with Sing
   String? _confluenceError;
   String? _confluenceSuccess;
 
+  // Google Drive knowledge variables
+  final _googleDriveNameController = TextEditingController();
+  final _googleDriveFolderUrlController = TextEditingController();
+  final _googleDriveAccessTokenController = TextEditingController();
+  final _googleDriveFormKey = GlobalKey<FormState>();
+  bool _isAddingGoogleDrive = false;
+  String? _googleDriveError;
+  String? _googleDriveSuccess;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -70,6 +79,9 @@ class _KnowledgeUploadScreenState extends State<KnowledgeUploadScreen> with Sing
     _confluenceUrlController.dispose();
     _confluenceUsernameController.dispose();
     _confluenceTokenController.dispose();
+    _googleDriveNameController.dispose();
+    _googleDriveFolderUrlController.dispose();
+    _googleDriveAccessTokenController.dispose();
     super.dispose();
   }
 
@@ -513,6 +525,110 @@ class _KnowledgeUploadScreenState extends State<KnowledgeUploadScreen> with Sing
     }
   }
 
+  // Add the method to handle Google Drive knowledge addition
+  Future<void> _addGoogleDriveKnowledge() async {
+    if (!_googleDriveFormKey.currentState!.validate()) {
+      return;
+    }
+
+    try {
+      setState(() {
+        _isAddingGoogleDrive = true;
+        _googleDriveError = null;
+        _googleDriveSuccess = null;
+      });
+
+      final unitName = _googleDriveNameController.text.trim();
+      final folderUrl = _googleDriveFolderUrlController.text.trim();
+      final accessToken = _googleDriveAccessTokenController.text.trim();
+
+      // Add Google Drive knowledge
+      final result = await _knowledgeService.addGoogleDriveKnowledge(
+          widget.knowledgeItem.id,
+          unitName,
+          folderUrl,
+          accessToken.isEmpty ? null : accessToken
+      );
+
+      setState(() {
+        _isAddingGoogleDrive = false;
+        _googleDriveSuccess = 'Google Drive knowledge added successfully';
+        // Clear the form
+        _googleDriveNameController.clear();
+        _googleDriveFolderUrlController.clear();
+        _googleDriveAccessTokenController.clear();
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Success!',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text('Google Drive folder "$unitName" has been added to "${widget.knowledgeItem.title}"'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error in _addGoogleDriveKnowledge: $e');
+      setState(() {
+        _isAddingGoogleDrive = false;
+        _googleDriveError = e.toString();
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.white),
+                SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Error!',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text('Failed to add Google Drive knowledge: ${e.toString()}'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 6),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -520,6 +636,7 @@ class _KnowledgeUploadScreenState extends State<KnowledgeUploadScreen> with Sing
         title: Text('Add Data Source to ${widget.knowledgeItem.title}'),
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           tabs: const [
             Tab(
               icon: Icon(Icons.upload_file),
@@ -536,6 +653,10 @@ class _KnowledgeUploadScreenState extends State<KnowledgeUploadScreen> with Sing
             Tab(
               icon: Icon(Icons.book_online),
               text: 'Confluence',
+            ),
+            Tab(
+              icon: Icon(Icons.drive_folder_upload),
+              text: 'Google Drive',
             ),
           ],
         ),
@@ -1241,6 +1362,188 @@ class _KnowledgeUploadScreenState extends State<KnowledgeUploadScreen> with Sing
                                     Expanded(
                                       child: Text(
                                         _confluenceSuccess!,
+                                        style: const TextStyle(color: Colors.green),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Google Drive Knowledge Tab
+              SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .outline
+                              .withOpacity(0.2),
+                        ),
+                      ),
+                      child: Form(
+                        key: _googleDriveFormKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Add a Google Drive folder to this knowledge source',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Connect a Google Drive folder to your knowledge base. Documents from the folder will be processed for AI to learn from.',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+
+                            // Google Drive Name field
+                            TextFormField(
+                              controller: _googleDriveNameController,
+                              decoration: InputDecoration(
+                                labelText: 'Google Drive Integration Name',
+                                hintText: 'Enter a name for this Google Drive integration',
+                                prefixIcon: Icon(Icons.drive_folder_upload),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter a name for the Google Drive integration';
+                                }
+                                return null;
+                              },
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            // Google Drive Folder URL field
+                            TextFormField(
+                              controller: _googleDriveFolderUrlController,
+                              decoration: InputDecoration(
+                                labelText: 'Google Drive Folder URL',
+                                hintText: 'Enter the Google Drive folder URL',
+                                prefixIcon: Icon(Icons.link),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter a Google Drive folder URL';
+                                }
+                                if (!value.startsWith('http://') && !value.startsWith('https://')) {
+                                  return 'URL must start with http:// or https://';
+                                }
+                                if (!value.contains('drive.google.com')) {
+                                  return 'URL must be a valid Google Drive URL';
+                                }
+                                return null;
+                              },
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            // Google Drive Access Token field
+                            TextFormField(
+                              controller: _googleDriveAccessTokenController,
+                              decoration: InputDecoration(
+                                labelText: 'Access Token (Optional)',
+                                hintText: 'Enter your access token or leave empty to use default',
+                                prefixIcon: Icon(Icons.vpn_key),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                helperText: 'If left empty, a default token will be used',
+                              ),
+                              // No validator since this field is optional
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // Add Google Drive button
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _isAddingGoogleDrive ? null : _addGoogleDriveKnowledge,
+                                icon: _isAddingGoogleDrive
+                                    ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                                    : const Icon(Icons.add_to_drive),
+                                label: Text(_isAddingGoogleDrive ? 'Adding...' : 'Add Google Drive Folder'),
+                              ),
+                            ),
+
+                            // Error message
+                            if (_googleDriveError != null) ...[
+                              const SizedBox(height: 16),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.red.withOpacity(0.5)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.error_outline, color: Colors.red),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _googleDriveError!,
+                                        style: const TextStyle(color: Colors.red),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+
+                            // Success message
+                            if (_googleDriveSuccess != null) ...[
+                              const SizedBox(height: 16),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.green.withOpacity(0.5)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.check_circle, color: Colors.green),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _googleDriveSuccess!,
                                         style: const TextStyle(color: Colors.green),
                                       ),
                                     ),

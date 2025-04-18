@@ -23,20 +23,42 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
   String? _errorMessage;
   List<KnowledgeUnit> _knowledgeUnits = [];
 
+  // Pagination variables
+  int _currentPage = 0;
+  final int _pageSize = 10; // 10 items per page
+  int _totalUnits = 0;
+  bool _hasMoreUnits = false;
+
   @override
   void initState() {
     super.initState();
     _loadKnowledgeUnits();
   }
 
-  Future<void> _loadKnowledgeUnits() async {
+  Future<void> _loadKnowledgeUnits({bool refresh = true}) async {
     try {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
+        if (refresh) {
+          _currentPage = 0;
+        }
       });
 
-      final units = await _knowledgeService.getKnowledgeUnits(widget.item.id);
+      final offset = _currentPage * _pageSize;
+      final units = await _knowledgeService.getKnowledgeUnits(
+          widget.item.id,
+          offset: offset,
+          limit: _pageSize
+      );
+
+      // Get total count from the first page
+      if (_currentPage == 0 || refresh) {
+        // This is a simplification - in a real app, the API should return the total count
+        _totalUnits = units.length >= _pageSize ? units.length + 1 : units.length;
+      }
+
+      _hasMoreUnits = units.length >= _pageSize;
 
       setState(() {
         _knowledgeUnits = units;
@@ -57,6 +79,26 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
           ),
         );
       }
+    }
+  }
+
+  // Add a method to navigate to the next page
+  void _nextPage() {
+    if (_hasMoreUnits) {
+      setState(() {
+        _currentPage++;
+      });
+      _loadKnowledgeUnits(refresh: false);
+    }
+  }
+
+  // Add a method to navigate to the previous page
+  void _previousPage() {
+    if (_currentPage > 0) {
+      setState(() {
+        _currentPage--;
+      });
+      _loadKnowledgeUnits(refresh: false);
     }
   }
 
@@ -258,14 +300,20 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                   else if (_knowledgeUnits.isEmpty)
                     _buildEmptyState()
                   else
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _knowledgeUnits.length,
-                      itemBuilder: (context, index) {
-                        final unit = _knowledgeUnits[index];
-                        return _buildKnowledgeUnitItem(context, unit);
-                      },
+                    Column(
+                      children: [
+                        // Knowledge units list
+                        ...List.generate(_knowledgeUnits.length, (index) {
+                          final unit = _knowledgeUnits[index];
+                          return _buildKnowledgeUnitItem(context, unit);
+                        }),
+
+                        // Pagination controls
+                        if (_knowledgeUnits.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          _buildPaginationControls(),
+                        ],
+                      ],
                     ),
 
                   const SizedBox(height: 24),
@@ -797,6 +845,68 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
             child: const Text('Delete'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPaginationControls() {
+    // Calculate total pages (this is an estimate since we don't have the exact total)
+    final estimatedTotalPages = (_totalUnits / _pageSize).ceil();
+    final displayPage = _currentPage + 1; // Convert to 1-based for display
+
+    // Calculate the range of items being displayed
+    final startItem = _currentPage * _pageSize + 1;
+    final endItem = startItem + _knowledgeUnits.length - 1;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Page info
+            Text(
+              'Showing $startItem-$endItem',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+
+            // Navigation buttons
+            Row(
+              children: [
+                // Previous page button
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: _currentPage > 0 ? _previousPage : null,
+                  tooltip: 'Previous page',
+                ),
+
+                // Page indicator
+                Text(
+                  'Page $displayPage',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                // Next page button
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: _hasMoreUnits ? _nextPage : null,
+                  tooltip: 'Next page',
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

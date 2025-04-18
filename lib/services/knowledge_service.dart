@@ -638,6 +638,94 @@ class KnowledgeService {
     }
   }
 
+  // Add Google Drive knowledge to an existing knowledge item
+  Future<Map<String, dynamic>> addGoogleDriveKnowledge(
+      String knowledgeId,
+      String unitName,
+      String folderUrl,
+      String? accessToken
+      ) async {
+    final token = await _getAuthToken();
+    final userGuid = await _getUserGuid();
+
+    if (token == null) {
+      throw Exception('Authentication token not found. Please login again.');
+    }
+
+    if (userGuid == null) {
+      throw Exception('User GUID not found.');
+    }
+
+    final headers = {
+      'x-jarvis-guid': userGuid,
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+
+    // Extract folder ID from URL
+    String folderId = '';
+    final RegExp folderIdRegex = RegExp(r'folders/([^/?]+)');
+    final match = folderIdRegex.firstMatch(folderUrl);
+    if (match != null && match.groupCount >= 1) {
+      folderId = match.group(1) ?? '';
+    } else {
+      throw Exception('Invalid Google Drive folder URL. Could not extract folder ID.');
+    }
+
+    // Use provided token if available, otherwise use a default value
+    final driveAccessToken = accessToken?.isNotEmpty == true
+        ? accessToken
+        : 'default_access_token';
+
+    final body = json.encode({
+      'googleDriveFolder': [
+        {
+          'url': folderUrl,
+          'mimeType': 'application/vnd.google-apps.folder',
+          'type': 'GOOGLE_DRIVE',
+          'id': folderId
+        }
+      ],
+      'unitName': unitName,
+      'accessToken': driveAccessToken,
+    });
+
+    try {
+      print('Adding Google Drive knowledge: $unitName, Folder URL: $folderUrl');
+      final uri = Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/google-drive');
+      print('API endpoint: $uri');
+
+      final response = await http.post(
+        uri,
+        headers: headers,
+        body: body,
+      );
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (response.body.isNotEmpty) {
+          return json.decode(response.body);
+        }
+        return {'success': true};
+      } else {
+        if (response.body.isNotEmpty) {
+          try {
+            final errorData = json.decode(response.body);
+            throw Exception(errorData['message'] ?? 'Failed to add Google Drive knowledge. Status: ${response.statusCode}');
+          } catch (e) {
+            throw Exception('Failed to add Google Drive knowledge. Status: ${response.statusCode}, Body: ${response.body}');
+          }
+        }
+        throw Exception('Failed to add Google Drive knowledge. Status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error adding Google Drive knowledge: $e');
+      throw Exception('Error adding Google Drive knowledge: $e');
+    }
+  }
+
   // Disable a knowledge item (if different from delete)
   Future<bool> disableKnowledgeItem(String id) async {
     // In this case, the API uses the same DELETE endpoint for both delete and disable
