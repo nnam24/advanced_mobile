@@ -959,7 +959,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                 // Delete knowledge item
                 final aiBotService =
                     Provider.of<AIBotService>(context, listen: false);
-                await aiBotService.deleteKnowledgeItem(item.id);
+                //await aiBotService.deleteKnowledgeItem(item.id);
 
                 if (mounted) {
                   // Clear any existing snackbars

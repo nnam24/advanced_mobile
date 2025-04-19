@@ -91,7 +91,7 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
 
       // Also update the AIBotService for consistency
       final aiBotService = Provider.of<AIBotService>(context, listen: false);
-      aiBotService.setKnowledgeItems(_knowledgeItems);
+      //aiBotService.setKnowledgeItems(_knowledgeItems);
     } catch (e) {
       setState(() {
         _hasError = true;
