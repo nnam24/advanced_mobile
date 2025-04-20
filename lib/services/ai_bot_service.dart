@@ -7,6 +7,7 @@ import '../models/knowledge_item.dart';
 import '../models/message.dart';
 import '../models/ai_bot_response.dart';
 import '../models/thread_response.dart';
+import '../models/knowledge_response.dart';
 
 class AIBotService extends ChangeNotifier {
   List<AIBot> _bots = [];
@@ -667,6 +668,131 @@ class AIBotService extends ChangeNotifier {
         type: MessageType.assistant,
         timestamp: DateTime.now(),
       );
+    }
+  }
+
+  // Get imported knowledge for a bot
+  Future<List<KnowledgeItem>> getImportedKnowledge(
+    String botId, {
+    String? searchQuery,
+    int offset = 0,
+    int limit = 20,
+    String orderField = 'createdAt',
+    String order = 'DESC',
+    bool updateLoadingState =
+        true, // Add parameter to control loading state updates
+  }) async {
+    try {
+      // Only update loading state if explicitly requested
+      bool shouldNotify = false;
+      if (updateLoadingState && !_isLoading) {
+        _isLoading = true;
+        shouldNotify = true;
+      }
+
+      // Notify outside of the build phase using Future.microtask
+      if (shouldNotify) {
+        Future.microtask(() => notifyListeners());
+      }
+
+      // Build query parameters
+      final queryParams = <String, String>{
+        'offset': offset.toString(),
+        'limit': limit.toString(),
+        'order': order,
+        'order_field': orderField,
+      };
+
+      // Add search query if provided
+      if (searchQuery != null && searchQuery.isNotEmpty) {
+        queryParams['q'] = searchQuery;
+      }
+
+      // Build URL with query parameters
+      final uri =
+          Uri.parse('$baseUrl/kb-core/v1/ai-assistant/$botId/knowledges')
+              .replace(
+        queryParameters: queryParams,
+      );
+
+      // Get headers
+      final headers = await _getHeaders();
+
+      print('Fetching imported knowledge for bot ID: $botId');
+      print('URL: $uri');
+
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
+        print('Response received: ${response.statusCode}');
+        print(
+            'Response body: ${jsonData.toString().substring(0, min(200, jsonData.toString().length))}...');
+
+        try {
+          final knowledgeResponse = KnowledgeResponse.fromJson(jsonData);
+          final List<KnowledgeItem> knowledgeItems = [];
+
+          // Parse knowledge items from the response data
+          for (var item in knowledgeResponse.data) {
+            try {
+              knowledgeItems.add(KnowledgeItem.fromJson(item));
+            } catch (e) {
+              print('Error parsing knowledge item: $e');
+              print('Item data: $item');
+            }
+          }
+
+          _error = '';
+
+          // Only update loading state if explicitly requested
+          if (updateLoadingState && _isLoading) {
+            _isLoading = false;
+            // Notify outside of the build phase using Future.microtask
+            Future.microtask(() => notifyListeners());
+          }
+
+          return knowledgeItems;
+        } catch (parseError) {
+          _error = 'Error parsing knowledge data: $parseError';
+          print(_error);
+          print('JSON data: $jsonData');
+
+          // Only update loading state if explicitly requested
+          if (updateLoadingState && _isLoading) {
+            _isLoading = false;
+            // Notify outside of the build phase using Future.microtask
+            Future.microtask(() => notifyListeners());
+          }
+
+          return [];
+        }
+      } else {
+        _error = 'Failed to load imported knowledge: ${response.statusCode}';
+        print(_error);
+        print('Response body: ${response.body}');
+
+        // Only update loading state if explicitly requested
+        if (updateLoadingState && _isLoading) {
+          _isLoading = false;
+          // Notify outside of the build phase using Future.microtask
+          Future.microtask(() => notifyListeners());
+        }
+
+        return [];
+      }
+    } catch (e) {
+      _error = 'Error fetching imported knowledge: $e';
+      print(_error);
+
+      // Only update loading state if explicitly requested
+      if (updateLoadingState && _isLoading) {
+        _isLoading = false;
+        // Notify outside of the build phase using Future.microtask
+        Future.microtask(() => notifyListeners());
+      }
+
+      return [];
     }
   }
 
