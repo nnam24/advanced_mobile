@@ -1,4 +1,4 @@
-class PromptResponse<T> {
+  class PromptResponse<T> {
   final bool hasNext;
   final int offset;
   final int limit;

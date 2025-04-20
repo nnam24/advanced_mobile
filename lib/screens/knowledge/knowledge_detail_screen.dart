@@ -1,12 +1,12 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:http_parser/http_parser.dart';
 import '../../services/ai_bot_service.dart';
 import '../../services/knowledge_service.dart';
 import '../../models/knowledge_item.dart';
+import '../../models/knowledge_unit.dart';
 import '../../widgets/animated_background.dart';
+import 'knowledge_upload_screen.dart';
+import 'knowledge_unit_detail_screen.dart';
 
 class KnowledgeDetailScreen extends StatefulWidget {
   final KnowledgeItem item;
@@ -19,277 +19,84 @@ class KnowledgeDetailScreen extends StatefulWidget {
 
 class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
   final _knowledgeService = KnowledgeService();
-  bool _isUploading = false;
-  String? _uploadError;
-  String? _uploadSuccess;
-  File? _selectedFile;
-  String? _selectedFileName;
+  bool _isLoading = true;
+  String? _errorMessage;
+  List<KnowledgeUnit> _knowledgeUnits = [];
 
-  // Website knowledge variables
-  final _websiteNameController = TextEditingController();
-  final _websiteUrlController = TextEditingController();
-  final _websiteFormKey = GlobalKey<FormState>();
-  bool _isAddingWebsite = false;
-  String? _websiteError;
-  String? _websiteSuccess;
+  // Pagination variables
+  int _currentPage = 0;
+  final int _pageSize = 10; // 10 items per page
+  int _totalUnits = 0;
+  bool _hasMoreUnits = false;
 
   @override
-  void dispose() {
-    _websiteNameController.dispose();
-    _websiteUrlController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadKnowledgeUnits();
   }
 
-  Future<void> _pickAndUploadFile() async {
+  Future<void> _loadKnowledgeUnits({bool refresh = true}) async {
     try {
-      // Pick file with supported extensions only
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: [
-          'c',
-          'cpp',
-          'docx',
-          'html',
-          'java',
-          'json',
-          'md',
-          'pdf',
-          'php',
-          'pptx',
-          'py',
-          'rb',
-          'tex',
-          'txt'
-        ],
-      );
-
-      if (result == null || result.files.single.path == null) {
-        return; // User canceled the picker
-      }
-
-      final filePath = result.files.single.path!;
-      final fileName = result.files.single.name;
-      final fileSize = result.files.single.size;
-      final fileExtension = fileName.split('.').last.toLowerCase();
-
-      print(
-          'Selected file: $fileName, path: $filePath, size: $fileSize bytes, extension: $fileExtension');
-
-      // Validate file type
-      final validExtensions = [
-        'c',
-        'cpp',
-        'docx',
-        'html',
-        'java',
-        'json',
-        'md',
-        'pdf',
-        'php',
-        'pptx',
-        'py',
-        'rb',
-        'tex',
-        'txt'
-      ];
-
-      if (!validExtensions.contains(fileExtension)) {
-        throw Exception(
-            'Unsupported file type. Please select one of the supported file types.');
-      }
-
       setState(() {
-        _isUploading = true;
-        _uploadError = null;
-        _uploadSuccess = null;
-        _selectedFile = File(filePath);
-        _selectedFileName = fileName;
-      });
-
-      // Check if file exists and is readable
-      if (!await _selectedFile!.exists()) {
-        throw Exception('File does not exist: $filePath');
-      }
-
-      print('File exists and is readable');
-
-      // Upload file
-      final success = await _knowledgeService.uploadFileToKnowledge(
-          widget.item.id, _selectedFile!);
-
-      setState(() {
-        _isUploading = false;
-        if (success) {
-          _uploadSuccess = 'File uploaded successfully';
+        _isLoading = true;
+        _errorMessage = null;
+        if (refresh) {
+          _currentPage = 0;
         }
       });
 
-      if (mounted && success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Success!',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                          'File "$_selectedFileName" has been uploaded to "${widget.item.title}"'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 4),
-          ),
-        );
+      final offset = _currentPage * _pageSize;
+      final units = await _knowledgeService.getKnowledgeUnits(widget.item.id,
+          offset: offset, limit: _pageSize);
+
+      // Get total count from the first page
+      if (_currentPage == 0 || refresh) {
+        // This is a simplification - in a real app, the API should return the total count
+        _totalUnits =
+            units.length >= _pageSize ? units.length + 1 : units.length;
       }
-    } catch (e) {
-      print('Error in _pickAndUploadFile: $e');
+
+      _hasMoreUnits = units.length >= _pageSize;
+
       setState(() {
-        _isUploading = false;
-        _uploadError = e.toString();
+        _knowledgeUnits = units;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.error_outline, color: Colors.white),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Error!',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text('Failed to upload file: ${e.toString()}'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            content: Text('Failed to load data sources: ${e.toString()}'),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 6),
           ),
         );
       }
     }
   }
 
-  Future<void> _addWebsiteKnowledge() async {
-    if (!_websiteFormKey.currentState!.validate()) {
-      return;
+  // Add a method to navigate to the next page
+  void _nextPage() {
+    if (_hasMoreUnits) {
+      setState(() {
+        _currentPage++;
+      });
+      _loadKnowledgeUnits(refresh: false);
     }
+  }
 
-    try {
+  // Add a method to navigate to the previous page
+  void _previousPage() {
+    if (_currentPage > 0) {
       setState(() {
-        _isAddingWebsite = true;
-        _websiteError = null;
-        _websiteSuccess = null;
+        _currentPage--;
       });
-
-      final unitName = _websiteNameController.text.trim();
-      final webUrl = _websiteUrlController.text.trim();
-
-      // Add website knowledge
-      final result = await _knowledgeService.addWebsiteKnowledge(
-          widget.item.id, unitName, webUrl);
-
-      setState(() {
-        _isAddingWebsite = false;
-        _websiteSuccess = 'Website knowledge added successfully';
-        // Clear the form
-        _websiteNameController.clear();
-        _websiteUrlController.clear();
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Success!',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                          'Website "$unitName" has been added to "${widget.item.title}"'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 4),
-          ),
-        );
-      }
-    } catch (e) {
-      print('Error in _addWebsiteKnowledge: $e');
-      setState(() {
-        _isAddingWebsite = false;
-        _websiteError = e.toString();
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.error_outline, color: Colors.white),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Error!',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text('Failed to add website knowledge: ${e.toString()}'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 6),
-          ),
-        );
-      }
+      _loadKnowledgeUnits(refresh: false);
     }
   }
 
@@ -302,7 +109,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
           IconButton(
             icon: const Icon(Icons.delete),
             onPressed: () {
-              _showDeleteConfirmation(context, widget.item);
+              _showDeleteConfirmation(context);
             },
           ),
         ],
@@ -310,537 +117,487 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
       body: Stack(
         children: [
           const AnimatedBackground(),
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Knowledge info card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color:
-                        Theme.of(context).colorScheme.surface.withOpacity(0.8),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
+          RefreshIndicator(
+            onRefresh: _loadKnowledgeUnits,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Knowledge info card
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
                       color: Theme.of(context)
                           .colorScheme
-                          .outline
-                          .withOpacity(0.2),
+                          .surface
+                          .withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline
+                            .withOpacity(0.2),
+                      ),
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 24,
-                            backgroundColor: Theme.of(context)
-                                .colorScheme
-                                .primary
-                                .withOpacity(0.1),
-                            child: Icon(
-                              _getFileIcon(),
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.item.title,
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                Text(
-                                  'Type: ${widget.item.fileType.toUpperCase()}',
-                                  style: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _buildInfoItem(
-                            context,
-                            'Created',
-                            _formatDate(widget.item.createdAt),
-                          ),
-                          _buildInfoItem(
-                            context,
-                            'Updated',
-                            _formatDate(widget.item.updatedAt),
-                          ),
-                          _buildInfoItem(
-                            context,
-                            'Size',
-                            '${(widget.item.content.length / 1024).toStringAsFixed(1)} KB',
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // File upload section
-                Text(
-                  'Upload File',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .outline
-                          .withOpacity(0.2),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Add a file to this knowledge source',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Supported file types: .c, .cpp, .docx, .html, .java, .json, .md, .pdf, .php, .pptx, .py, .rb, .tex, .txt',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Selected file info
-                      if (_selectedFile != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .primaryContainer
-                                .withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.insert_drive_file,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _selectedFileName ??
-                                          _selectedFile!.path.split('/').last,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    Text(
-                                      '${(_selectedFile!.lengthSync() / 1024).toStringAsFixed(1)} KB',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.close),
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedFile = null;
-                                    _selectedFileName = null;
-                                  });
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-
-                      // Upload button
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _isUploading ? null : _pickAndUploadFile,
-                          icon: _isUploading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white),
-                                  ),
-                                )
-                              : const Icon(Icons.upload_file),
-                          label: Text(_isUploading
-                              ? 'Uploading...'
-                              : 'Select & Upload File'),
-                        ),
-                      ),
-
-                      // Error message
-                      if (_uploadError != null) ...[
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border:
-                                Border.all(color: Colors.red.withOpacity(0.5)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.error_outline,
-                                  color: Colors.red),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _uploadError!,
-                                  style: const TextStyle(color: Colors.red),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-
-                      // Success message
-                      if (_uploadSuccess != null) ...[
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                                color: Colors.green.withOpacity(0.5)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.check_circle,
-                                  color: Colors.green),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _uploadSuccess!,
-                                  style: const TextStyle(color: Colors.green),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Website Knowledge section
-                Text(
-                  'Add Website Knowledge',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .outline
-                          .withOpacity(0.2),
-                    ),
-                  ),
-                  child: Form(
-                    key: _websiteFormKey,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Add a website to this knowledge source',
-                          style: TextStyle(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Website Name field
-                        TextFormField(
-                          controller: _websiteNameController,
-                          decoration: InputDecoration(
-                            labelText: 'Website Name',
-                            hintText: 'Enter a name for this website',
-                            prefixIcon: Icon(Icons.web),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter a website name';
-                            }
-                            return null;
-                          },
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        // Website URL field
-                        TextFormField(
-                          controller: _websiteUrlController,
-                          decoration: InputDecoration(
-                            labelText: 'Website URL',
-                            hintText:
-                                'Enter the website URL (e.g., https://example.com)',
-                            prefixIcon: Icon(Icons.link),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter a website URL';
-                            }
-                            if (!value.startsWith('http://') &&
-                                !value.startsWith('https://')) {
-                              return 'URL must start with http:// or https://';
-                            }
-                            return null;
-                          },
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        // Add Website button
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed:
-                                _isAddingWebsite ? null : _addWebsiteKnowledge,
-                            icon: _isAddingWebsite
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                          Colors.white),
-                                    ),
-                                  )
-                                : const Icon(Icons.add_link),
-                            label: Text(
-                                _isAddingWebsite ? 'Adding...' : 'Add Website'),
-                          ),
-                        ),
-
-                        // Error message
-                        if (_websiteError != null) ...[
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                  color: Colors.red.withOpacity(0.5)),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.error_outline,
-                                    color: Colors.red),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    _websiteError!,
-                                    style: const TextStyle(color: Colors.red),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-
-                        // Success message
-                        if (_websiteSuccess != null) ...[
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                  color: Colors.green.withOpacity(0.5)),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.check_circle,
-                                    color: Colors.green),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    _websiteSuccess!,
-                                    style: const TextStyle(color: Colors.green),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Content section
-                Text(
-                  'Content',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .outline
-                          .withOpacity(0.2),
-                    ),
-                  ),
-                  child: SelectableText(
-                    widget.item.content,
-                    style: const TextStyle(height: 1.5),
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Used by bots section
-                FutureBuilder<List<String>>(
-                  future: _getBotsUsingKnowledge(context),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    final botNames = snapshot.data ?? [];
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Used by Bots',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surface,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Theme.of(context)
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 24,
+                              backgroundColor: Theme.of(context)
                                   .colorScheme
-                                  .outline
-                                  .withOpacity(0.2),
+                                  .primary
+                                  .withOpacity(0.1),
+                              child: Icon(
+                                Icons.folder,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
                             ),
-                          ),
-                          child: botNames.isEmpty
-                              ? const Text('Not used by any bots yet')
-                              : Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: botNames
-                                      .map((name) => Padding(
-                                            padding: const EdgeInsets.only(
-                                                bottom: 8.0),
-                                            child: Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.smart_toy,
-                                                  size: 16,
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .primary,
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Text(name),
-                                              ],
-                                            ),
-                                          ))
-                                      .toList(),
-                                ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.item.title,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Data Sources: ${_knowledgeUnits.length}',
+                                    style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildInfoItem(
+                              context,
+                              'Created',
+                              _formatDate(widget.item.createdAt),
+                            ),
+                            _buildInfoItem(
+                              context,
+                              'Updated',
+                              _formatDate(widget.item.updatedAt),
+                            ),
+                            _buildInfoItem(
+                              context,
+                              'Size',
+                              _formatSize(widget.item.totalSize),
+                            ),
+                          ],
                         ),
                       ],
-                    );
-                  },
-                ),
-              ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Description section
+                  Text(
+                    'Description',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline
+                            .withOpacity(0.2),
+                      ),
+                    ),
+                    child: SelectableText(
+                      widget.item.content,
+                      style: const TextStyle(height: 1.5),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Data Sources section
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Data Sources',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => KnowledgeUploadScreen(
+                                  knowledgeItem: widget.item),
+                            ),
+                          ).then((_) => _loadKnowledgeUnits());
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Source'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          textStyle: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Error message if any
+                  if (_errorMessage != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.withOpacity(0.5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.refresh, color: Colors.red),
+                            onPressed: _loadKnowledgeUnits,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Loading indicator
+                  if (_isLoading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24.0),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else if (_knowledgeUnits.isEmpty)
+                    _buildEmptyState()
+                  else
+                    Column(
+                      children: [
+                        // Knowledge units list
+                        ...List.generate(_knowledgeUnits.length, (index) {
+                          final unit = _knowledgeUnits[index];
+                          return _buildKnowledgeUnitItem(context, unit);
+                        }),
+
+                        // Pagination controls
+                        if (_knowledgeUnits.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          _buildPaginationControls(),
+                        ],
+                      ],
+                    ),
+
+                  const SizedBox(height: 24),
+
+                  // Used by bots section
+                  FutureBuilder<List<String>>(
+                    future: _getBotsUsingKnowledge(context),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final botNames = snapshot.data ?? [];
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Used by Bots',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outline
+                                    .withOpacity(0.2),
+                              ),
+                            ),
+                            child: botNames.isEmpty
+                                ? const Text('Not used by any bots yet')
+                                : Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: botNames
+                                        .map((name) => Padding(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 8.0),
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.smart_toy,
+                                                    size: 16,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .primary,
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(name),
+                                                ],
+                                              ),
+                                            ))
+                                        .toList(),
+                                  ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  KnowledgeUploadScreen(knowledgeItem: widget.item),
+            ),
+          ).then((_) => _loadKnowledgeUnits());
+        },
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.source_outlined,
+            size: 64,
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No Data Sources',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onBackground,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Add your first data source to enhance this knowledge base',
+            style: TextStyle(
+              color:
+                  Theme.of(context).colorScheme.onBackground.withOpacity(0.7),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      KnowledgeUploadScreen(knowledgeItem: widget.item),
+                ),
+              ).then((_) => _loadKnowledgeUnits());
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Add Data Source'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKnowledgeUnitItem(BuildContext context, KnowledgeUnit unit) {
+    IconData unitIcon;
+    String unitTypeLabel;
+
+    switch (unit.type.toLowerCase()) {
+      case 'file':
+        unitIcon = Icons.insert_drive_file;
+        unitTypeLabel = 'File';
+        break;
+      case 'web':
+        unitIcon = Icons.language;
+        unitTypeLabel = 'Website';
+        break;
+      case 'slack':
+        unitIcon = Icons.chat;
+        unitTypeLabel = 'Slack';
+        break;
+      default:
+        unitIcon = Icons.data_object;
+        unitTypeLabel = 'Data Source';
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+        ),
+      ),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor:
+              Theme.of(context).colorScheme.primary.withOpacity(0.1),
+          child: Icon(
+            unitIcon,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+        title: Text(unit.name),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Type: $unitTypeLabel',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (unit.sourceUrl.isNotEmpty)
+              Text(
+                'Source: ${unit.sourceUrl.length > 30 ? '${unit.sourceUrl.substring(0, 30)}...' : unit.sourceUrl}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            Text(
+              'Added: ${_formatDate(unit.createdAt)}',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'delete') {
+              _showDeleteUnitConfirmation(context, unit);
+            } else if (value == 'view') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => KnowledgeUnitDetailScreen(unit: unit),
+                ),
+              ).then((result) {
+                if (result == true) {
+                  // Refresh the list if the unit was deleted
+                  _loadKnowledgeUnits();
+                }
+              });
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'view',
+              child: Row(
+                children: [
+                  Icon(Icons.visibility, size: 20),
+                  SizedBox(width: 8),
+                  Text('View Details'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(Icons.delete, size: 20, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text('Delete', style: TextStyle(color: Colors.red)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        onTap: () {
+          // Navigate to the unit detail screen
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => KnowledgeUnitDetailScreen(unit: unit),
+            ),
+          ).then((result) {
+            if (result == true) {
+              // Refresh the list if the unit was deleted
+              _loadKnowledgeUnits();
+            }
+          });
+        },
       ),
     );
   }
@@ -866,22 +623,6 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
     );
   }
 
-  IconData _getFileIcon() {
-    switch (widget.item.fileType) {
-      case 'pdf':
-        return Icons.picture_as_pdf;
-      case 'doc':
-      case 'docx':
-        return Icons.description;
-      case 'txt':
-        return Icons.text_snippet;
-      case 'url':
-        return Icons.link;
-      default:
-        return Icons.insert_drive_file;
-    }
-  }
-
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
@@ -901,6 +642,18 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
     }
   }
 
+  String _formatSize(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    } else if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    } else if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    } else {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
+  }
+
   Future<List<String>> _getBotsUsingKnowledge(BuildContext context) async {
     // In a real app, this would query the API
     // For now, we'll just check which bots have this knowledge item
@@ -916,13 +669,13 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
     return botNames;
   }
 
-  void _showDeleteConfirmation(BuildContext context, KnowledgeItem item) {
+  void _showDeleteConfirmation(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Knowledge Source'),
         content: Text(
-            'Are you sure you want to delete "${item.title}"? This action cannot be undone.'),
+            'Are you sure you want to delete "${widget.item.title}"? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -959,7 +712,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                 // Delete knowledge item
                 final aiBotService =
                     Provider.of<AIBotService>(context, listen: false);
-                //await aiBotService.deleteKnowledgeItem(item.id);
+                await aiBotService.deleteKnowledgeItem(widget.item.id);
 
                 if (mounted) {
                   // Clear any existing snackbars
@@ -974,7 +727,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                           SizedBox(width: 16),
                           Expanded(
                             child: Text(
-                                'Knowledge source "${item.title}" has been deleted'),
+                                'Knowledge source "${widget.item.title}" has been deleted'),
                           ),
                         ],
                       ),
@@ -1016,6 +769,172 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
             child: const Text('Delete'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showDeleteUnitConfirmation(BuildContext context, KnowledgeUnit unit) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Data Source'),
+        content: Text(
+            'Are you sure you want to delete "${unit.name}"? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+
+              // Show loading indicator
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Row(
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      ),
+                      SizedBox(width: 16),
+                      Text('Deleting data source...'),
+                    ],
+                  ),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+
+              try {
+                // Delete the knowledge unit
+                final success = await _knowledgeService.deleteKnowledgeUnit(
+                    widget.item.id, unit.id);
+
+                if (success && mounted) {
+                  // Clear any existing snackbars
+                  ScaffoldMessenger.of(context).clearSnackBars();
+
+                  // Show success notification
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.white),
+                          SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                                'Data source "${unit.name}" has been deleted'),
+                          ),
+                        ],
+                      ),
+                      backgroundColor: Colors.green,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+
+                  // Refresh the list
+                  _loadKnowledgeUnits();
+                }
+              } catch (e) {
+                if (mounted) {
+                  // Clear any existing snackbars
+                  ScaffoldMessenger.of(context).clearSnackBars();
+
+                  // Show error notification
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.error_outline, color: Colors.white),
+                          SizedBox(width: 16),
+                          Expanded(
+                            child: Text('Failed to delete: ${e.toString()}'),
+                          ),
+                        ],
+                      ),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaginationControls() {
+    // Calculate total pages (this is an estimate since we don't have the exact total)
+    final estimatedTotalPages = (_totalUnits / _pageSize).ceil();
+    final displayPage = _currentPage + 1; // Convert to 1-based for display
+
+    // Calculate the range of items being displayed
+    final startItem = _currentPage * _pageSize + 1;
+    final endItem = startItem + _knowledgeUnits.length - 1;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Page info
+            Text(
+              'Showing $startItem-$endItem',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+
+            // Navigation buttons
+            Row(
+              children: [
+                // Previous page button
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: _currentPage > 0 ? _previousPage : null,
+                  tooltip: 'Previous page',
+                ),
+
+                // Page indicator
+                Text(
+                  'Page $displayPage',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                // Next page button
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: _hasMoreUnits ? _nextPage : null,
+                  tooltip: 'Next page',
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
