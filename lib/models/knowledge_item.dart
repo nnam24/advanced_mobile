@@ -73,11 +73,11 @@ class KnowledgeItem {
       content: json['description'] ?? json['content'] ?? '',
       fileUrl: json['fileUrl'] ?? '',
       fileType: json['fileType'] ?? 'text',
-      createdAt: json['createdAt'] != null 
-          ? DateTime.parse(json['createdAt']) 
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
           : DateTime.now(),
-      updatedAt: json['updatedAt'] != null 
-          ? DateTime.parse(json['updatedAt']) 
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
           : DateTime.now(),
       userId: json['userId'],
       numUnits: json['numUnits'] ?? 0,
