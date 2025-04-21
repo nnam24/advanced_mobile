@@ -47,48 +47,48 @@ class _AIBotPublishScreenState extends State<AIBotPublishScreen> {
   }
 
   Future<void> _publishBot() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+    // if (_formKey.currentState!.validate()) {
+    //   setState(() {
+    //     _isLoading = true;
+    //   });
 
-      try {
-        // Build the channels map
-        final Map<String, String> channels = {};
-        _selectedChannels.forEach((channel, isSelected) {
-          if (isSelected) {
-            channels[channel] = _channelControllers[channel]!.text.trim();
-          }
-        });
+    //   try {
+    //     // Build the channels map
+    //     final Map<String, String> channels = {};
+    //     _selectedChannels.forEach((channel, isSelected) {
+    //       if (isSelected) {
+    //         channels[channel] = _channelControllers[channel]!.text.trim();
+    //       }
+    //     });
 
-        // Publish the bot
-        final aiBotService = Provider.of<AIBotService>(context, listen: false);
-        final success = await aiBotService.publishBot(widget.bot.id, channels);
+    //     // Publish the bot
+    //     final aiBotService = Provider.of<AIBotService>(context, listen: false);
+    //     final success = await aiBotService.publishBot(widget.bot.id, channels);
 
-        if (success && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Bot published successfully'),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          Navigator.pop(context);
-        } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to publish bot: ${aiBotService.error}'),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-      }
-    }
+    //     if (success && mounted) {
+    //       ScaffoldMessenger.of(context).showSnackBar(
+    //         const SnackBar(
+    //           content: Text('Bot published successfully'),
+    //           behavior: SnackBarBehavior.floating,
+    //         ),
+    //       );
+    //       Navigator.pop(context);
+    //     } else if (mounted) {
+    //       ScaffoldMessenger.of(context).showSnackBar(
+    //         SnackBar(
+    //           content: Text('Failed to publish bot: ${aiBotService.error}'),
+    //           behavior: SnackBarBehavior.floating,
+    //         ),
+    //       );
+    //     }
+    //   } finally {
+    //     if (mounted) {
+    //       setState(() {
+    //         _isLoading = false;
+    //       });
+    //     }
+    //   }
+    // }
   }
 
   @override

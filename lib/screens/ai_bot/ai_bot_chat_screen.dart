@@ -23,10 +23,53 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
   final FocusNode _focusNode = FocusNode();
   final List<Message> _messages = [];
   bool _isLoading = false;
+  bool _showScrollToBottom = false;
+  bool _isFirstMessage = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_scrollListener);
+
+    // Check if we already have a thread for this bot
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final aiBotService = Provider.of<AIBotService>(context, listen: false);
+      final hasThread = aiBotService.threadIds.containsKey(widget.bot.id) &&
+          aiBotService.threadIds[widget.bot.id]!.isNotEmpty;
+
+      setState(() {
+        _isFirstMessage = !hasThread;
+      });
+
+      // Add a welcome message from the bot
+      setState(() {
+        _messages.add(
+          Message(
+            id: 'welcome',
+            content:
+                'Hello! I am ${widget.bot.name}. ${widget.bot.description} How can I help you today?',
+            type: MessageType.assistant,
+            timestamp: DateTime.now(),
+          ),
+        );
+      });
+    });
+  }
+
+  void _scrollListener() {
+    if (_scrollController.hasClients) {
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      final currentScroll = _scrollController.position.pixels;
+      setState(() {
+        _showScrollToBottom = currentScroll < maxScroll - 200;
+      });
+    }
+  }
 
   @override
   void dispose() {
     _messageController.dispose();
+    _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -68,12 +111,18 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
 
     try {
       final aiBotService = Provider.of<AIBotService>(context, listen: false);
-      final response = await aiBotService.askBot(widget.bot.id, message);
+
+      // Use the combined method that handles both first and subsequent messages
+      final response = await aiBotService.sendMessage(widget.bot.id, message);
 
       if (!mounted) return;
       setState(() {
         _messages.add(response);
         _isLoading = false;
+        // If this was the first message, now we're in subsequent message mode
+        if (_isFirstMessage) {
+          _isFirstMessage = false;
+        }
       });
 
       // Scroll to bottom after receiving response
@@ -87,11 +136,17 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
         _messages.add(
           Message(
             id: DateTime.now().millisecondsSinceEpoch.toString(),
-            content: 'Sorry, there was an error processing your request.',
+            content:
+                'Sorry, there was an error processing your request: ${e.toString()}',
             type: MessageType.assistant,
             timestamp: DateTime.now(),
           ),
         );
+      });
+
+      // Scroll to bottom to show error message
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
       });
     }
   }
@@ -150,6 +205,25 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
               _showBotInfo(context);
             },
           ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'reset_thread') {
+                _showResetThreadConfirmation(context);
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'reset_thread',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh, size: 20),
+                    SizedBox(width: 8),
+                    Text('Reset Conversation'),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       body: SafeArea(
@@ -174,6 +248,15 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
                             );
                           },
                         ),
+                  if (_showScrollToBottom)
+                    Positioned(
+                      right: 16,
+                      bottom: 16,
+                      child: FloatingActionButton.small(
+                        onPressed: _scrollToBottom,
+                        child: const Icon(Icons.arrow_downward),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -207,7 +290,9 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
                     ),
                     const SizedBox(width: 16),
                     Text(
-                      'Thinking...',
+                      _isFirstMessage
+                          ? 'Creating conversation...'
+                          : 'Thinking...',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -290,6 +375,60 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showResetThreadConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Conversation'),
+        content: const Text(
+          'This will clear the current conversation history with the AI. '
+          'The AI will not remember previous messages. Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              final aiBotService =
+                  Provider.of<AIBotService>(context, listen: false);
+              aiBotService.resetThread(widget.bot.id);
+
+              setState(() {
+                // Clear all messages except the welcome message
+                _messages.clear();
+                _messages.add(
+                  Message(
+                    id: 'welcome_reset',
+                    content:
+                        'Conversation has been reset. How can I help you today?',
+                    type: MessageType.assistant,
+                    timestamp: DateTime.now(),
+                  ),
+                );
+                _isFirstMessage = true;
+              });
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Conversation has been reset'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Reset'),
+          ),
+        ],
       ),
     );
   }

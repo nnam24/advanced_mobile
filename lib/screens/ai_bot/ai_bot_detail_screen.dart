@@ -21,23 +21,167 @@ class AIBotDetailScreen extends StatefulWidget {
 class _AIBotDetailScreenState extends State<AIBotDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  bool _isLoading = false;
+  bool _isDeleting = false;
+  bool _isLoadingKnowledge = false;
+  List<KnowledgeItem> _knowledgeItems = [];
+  bool _hasMoreKnowledge = true;
+  int _knowledgeOffset = 0;
+  final int _knowledgeLimit = 10;
+  String _knowledgeError = '';
+  final ScrollController _knowledgeScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _knowledgeScrollController.addListener(_handleKnowledgeScroll);
 
     // Select the bot
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final aiBotService = Provider.of<AIBotService>(context, listen: false);
-      aiBotService.selectBot(widget.botId);
+      _loadBotDetails();
     });
+  }
+
+  void _handleKnowledgeScroll() {
+    if (_knowledgeScrollController.position.pixels >=
+        _knowledgeScrollController.position.maxScrollExtent - 200) {
+      if (!_isLoadingKnowledge && _hasMoreKnowledge) {
+        _loadMoreKnowledgeItems();
+      }
+    }
+  }
+
+  Future<void> _loadBotDetails() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final aiBotService = Provider.of<AIBotService>(context, listen: false);
+      await aiBotService.selectBot(widget.botId);
+
+      // After bot is loaded, fetch knowledge items
+      await _loadKnowledgeItems(refresh: true);
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading bot details: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load bot details: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  // Add this method to load knowledge items
+  Future<void> _loadKnowledgeItems({bool refresh = false}) async {
+    if (!mounted) return;
+
+    final aiBotService = Provider.of<AIBotService>(context, listen: false);
+    if (aiBotService.selectedBot == null) return;
+
+    setState(() {
+      _isLoadingKnowledge = true;
+      if (refresh) {
+        _knowledgeOffset = 0;
+        _hasMoreKnowledge = true;
+        _knowledgeItems = [];
+      }
+    });
+
+    try {
+      // Use updateLoadingState: false to prevent notifyListeners during build
+      final items = await aiBotService.getImportedKnowledge(
+        aiBotService.selectedBot!.id,
+        offset: _knowledgeOffset,
+        limit: _knowledgeLimit,
+        updateLoadingState: false,
+      );
+
+      if (mounted) {
+        setState(() {
+          if (refresh) {
+            _knowledgeItems = items;
+          } else {
+            _knowledgeItems = [..._knowledgeItems, ...items];
+          }
+          _knowledgeOffset = _knowledgeItems.length;
+          _hasMoreKnowledge = items.length >= _knowledgeLimit;
+          _isLoadingKnowledge = false;
+          _knowledgeError = '';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _knowledgeError = 'Failed to load knowledge items: $e';
+          _isLoadingKnowledge = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadMoreKnowledgeItems() async {
+    if (_hasMoreKnowledge && !_isLoadingKnowledge) {
+      await _loadKnowledgeItems();
+    }
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _knowledgeScrollController.removeListener(_handleKnowledgeScroll);
+    _knowledgeScrollController.dispose();
     super.dispose();
+  }
+
+  // Create a method to navigate to the knowledge screen without using the provider directly
+  void _navigateToKnowledgeScreen(AIBot bot) {
+    // Create a copy of the bot to avoid direct provider access during navigation
+    final botCopy = AIBot(
+      id: bot.id,
+      name: bot.name,
+      description: bot.description,
+      instructions: bot.instructions,
+      avatarUrl: bot.avatarUrl,
+      createdAt: bot.createdAt,
+      updatedAt: bot.updatedAt,
+      knowledgeIds: List.from(bot.knowledgeIds),
+      isPublished: bot.isPublished,
+      publishedChannels: Map.from(bot.publishedChannels),
+      openAiAssistantId: bot.openAiAssistantId,
+      openAiThreadIdPlay: bot.openAiThreadIdPlay,
+      createdBy: bot.createdBy,
+      updatedBy: bot.updatedBy,
+    );
+
+    // Use Future.microtask to ensure navigation happens outside of the build phase
+    Future.microtask(() {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AIBotKnowledgeScreen(bot: botCopy),
+        ),
+      ).then((_) {
+        // Refresh bot details when returning from knowledge screen
+        _loadBotDetails();
+      });
+    });
   }
 
   @override
@@ -45,7 +189,7 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
     final aiBotService = Provider.of<AIBotService>(context);
     final bot = aiBotService.selectedBot;
 
-    if (aiBotService.isLoading) {
+    if (_isLoading || aiBotService.isLoading) {
       return Scaffold(
         appBar: AppBar(title: const Text('AI Bot Details')),
         body: const Center(child: CircularProgressIndicator()),
@@ -55,7 +199,42 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
     if (bot == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('AI Bot Details')),
-        body: const Center(child: Text('Bot not found')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Theme.of(context).colorScheme.error.withOpacity(0.5),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Bot Not Found',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'The AI bot you\'re looking for could not be found',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Go Back'),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -71,7 +250,10 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
                 MaterialPageRoute(
                   builder: (context) => AIBotEditScreen(bot: bot),
                 ),
-              );
+              ).then((_) {
+                // Refresh bot details when returning from edit screen
+                _loadBotDetails();
+              });
             },
           ),
           PopupMenuButton<String>(
@@ -84,7 +266,10 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
                   MaterialPageRoute(
                     builder: (context) => AIBotPublishScreen(bot: bot),
                   ),
-                );
+                ).then((_) {
+                  // Refresh bot details when returning from publish screen
+                  _loadBotDetails();
+                });
               }
             },
             itemBuilder: (context) => [
@@ -178,7 +363,7 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
                         _buildInfoItem(
                           context,
                           Icons.description_outlined,
-                          '${bot.knowledgeIds.length}',
+                          '${_knowledgeItems.length}',
                           'Knowledge Sources',
                         ),
                         _buildInfoItem(
@@ -218,7 +403,7 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
                     _buildInstructionsTab(context, bot),
 
                     // Knowledge tab
-                    _buildKnowledgeTab(context, bot, aiBotService),
+                    _buildKnowledgeTab(context, bot),
 
                     // Preview tab
                     _buildPreviewTab(context, bot),
@@ -227,6 +412,25 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
               ),
             ],
           ),
+
+          // Show loading overlay when deleting
+          if (_isDeleting)
+            Container(
+              color: Colors.black.withOpacity(0.5),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Deleting bot...',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -318,7 +522,10 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
                   MaterialPageRoute(
                     builder: (context) => AIBotEditScreen(bot: bot),
                   ),
-                );
+                ).then((_) {
+                  // Refresh bot details when returning from edit screen
+                  _loadBotDetails();
+                });
               },
               icon: const Icon(Icons.edit),
               label: const Text('Edit Instructions'),
@@ -329,10 +536,8 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
     );
   }
 
-  Widget _buildKnowledgeTab(
-      BuildContext context, AIBot bot, AIBotService aiBotService) {
-    final knowledgeItems = aiBotService.getBotKnowledgeItems(bot.id);
-
+  // Update the _buildKnowledgeTab method to use the local state
+  Widget _buildKnowledgeTab(BuildContext context, AIBot bot) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -341,73 +546,91 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Knowledge Sources (${knowledgeItems.length})',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
+              Expanded(
+                child: Text(
+                  'Knowledge Sources (${_knowledgeItems.length})',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => AIBotKnowledgeScreen(bot: bot),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.add),
-                label: const Text('Add Knowledge'),
+                onPressed: () => _navigateToKnowledgeScreen(bot),
+                icon: const Icon(Icons.settings, size: 16),
+                label: const Text('Manage'),
                 style: ElevatedButton.styleFrom(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  textStyle: const TextStyle(fontSize: 14),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  textStyle: const TextStyle(fontSize: 12),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: knowledgeItems.isEmpty
-                ? _buildEmptyKnowledge(context)
-                : ListView.builder(
-                    itemCount: knowledgeItems.length,
-                    itemBuilder: (context, index) {
-                      final item = knowledgeItems[index];
-                      return _buildKnowledgeItem(
-                          context, item, bot, aiBotService);
-                    },
-                  ),
+            child: _knowledgeError.isNotEmpty
+                ? _buildErrorState(context)
+                : _isLoadingKnowledge && _knowledgeItems.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : _knowledgeItems.isEmpty
+                        ? _buildEmptyKnowledge(context, bot)
+                        : RefreshIndicator(
+                            onRefresh: () => _loadKnowledgeItems(refresh: true),
+                            child: ListView.builder(
+                              controller: _knowledgeScrollController,
+                              itemCount: _knowledgeItems.length +
+                                  (_hasMoreKnowledge ? 1 : 0),
+                              itemBuilder: (context, index) {
+                                if (index == _knowledgeItems.length) {
+                                  // Load more when reaching the end
+                                  if (!_isLoadingKnowledge) {
+                                    _loadMoreKnowledgeItems();
+                                  }
+                                  return const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(8.0),
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                }
+
+                                final item = _knowledgeItems[index];
+                                return _buildKnowledgeItem(context, item);
+                              },
+                            ),
+                          ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyKnowledge(BuildContext context) {
-    final bot = Provider.of<AIBotService>(context).selectedBot!;
+  // Add this method to show error state
+  Widget _buildErrorState(BuildContext context) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.description_outlined,
+            Icons.error_outline,
             size: 64,
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+            color: Theme.of(context).colorScheme.error.withOpacity(0.5),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'No Knowledge Sources',
+          Text(
+            'Error Loading Knowledge',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.error,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Add knowledge sources to improve your bot\'s responses',
+            _knowledgeError,
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -415,26 +638,65 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => AIBotKnowledgeScreen(bot: bot),
-                ),
-              );
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Add Knowledge'),
+            onPressed: () => _loadKnowledgeItems(refresh: true),
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildKnowledgeItem(BuildContext context, KnowledgeItem item,
-      AIBot bot, AIBotService aiBotService) {
+  Widget _buildEmptyKnowledge(BuildContext context, AIBot bot) {
+    // Use a ListView to make the RefreshIndicator work
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        SizedBox(
+          height: MediaQuery.of(context).size.height * 0.5,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.description_outlined,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No Knowledge Sources',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Add knowledge sources to improve your bot\'s responses',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () => _navigateToKnowledgeScreen(bot),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Knowledge'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Update the knowledge item builder to remove the delete button
+  Widget _buildKnowledgeItem(BuildContext context, KnowledgeItem item) {
     IconData fileIcon;
-    switch (item.fileType) {
+    switch (item.fileType.toLowerCase()) {
       case 'pdf':
         fileIcon = Icons.picture_as_pdf;
         break;
@@ -446,6 +708,7 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
         fileIcon = Icons.text_snippet;
         break;
       case 'url':
+      case 'web':
         fileIcon = Icons.link;
         break;
       default:
@@ -479,12 +742,6 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
             fontSize: 12,
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
-        ),
-        trailing: IconButton(
-          icon: const Icon(Icons.delete_outline, color: Colors.red),
-          onPressed: () {
-            _showRemoveKnowledgeConfirmation(context, bot, item, aiBotService);
-          },
         ),
         onTap: () {
           // Show knowledge item details
@@ -583,40 +840,75 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
   }
 
   void _showDeleteConfirmation(BuildContext context, AIBot bot) {
+    // Get the provider reference before any async operations
+    final aiBotService = Provider.of<AIBotService>(context, listen: false);
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete AI Bot'),
         content: Text(
             'Are you sure you want to delete "${bot.name}"? This action cannot be undone.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.of(context).pop();
-              final aiBotService =
-                  Provider.of<AIBotService>(context, listen: false);
-              final success = await aiBotService.deleteBot(bot.id);
+              // Close the dialog first
+              Navigator.of(dialogContext).pop();
 
-              if (success && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('AI Bot deleted successfully'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-                Navigator.of(context).pop(); // Go back to list screen
-              } else if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content:
-                        Text('Failed to delete AI Bot: ${aiBotService.error}'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+              // Only proceed if the main widget is still mounted
+              if (!mounted) return;
+
+              // Set deleting state
+              setState(() {
+                _isDeleting = true;
+              });
+
+              try {
+                final success = await aiBotService.deleteBot(bot.id);
+
+                // Only proceed if the widget is still mounted
+                if (!mounted) return;
+
+                // Reset deleting state
+                setState(() {
+                  _isDeleting = false;
+                });
+
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('AI Bot deleted successfully'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  Navigator.of(context)
+                      .pop(true); // Go back to list screen with result
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          'Failed to delete AI Bot: ${aiBotService.error}'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              } catch (e) {
+                // Handle any exceptions
+                if (mounted) {
+                  setState(() {
+                    _isDeleting = false;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error deleting AI Bot: $e'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
               }
             },
             style: ElevatedButton.styleFrom(
@@ -624,54 +916,6 @@ class _AIBotDetailScreenState extends State<AIBotDetailScreen>
               foregroundColor: Colors.white,
             ),
             child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showRemoveKnowledgeConfirmation(BuildContext context, AIBot bot,
-      KnowledgeItem item, AIBotService aiBotService) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove Knowledge Source'),
-        content: Text(
-            'Are you sure you want to remove "${item.title}" from this bot?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              final success =
-                  await aiBotService.removeKnowledgeFromBot(bot.id, item.id);
-
-              if (success && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Knowledge source removed successfully'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-                setState(() {}); // Refresh the UI
-              } else if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                        'Failed to remove knowledge source: ${aiBotService.error}'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Remove'),
           ),
         ],
       ),
