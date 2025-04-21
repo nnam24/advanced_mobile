@@ -1,201 +1,204 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/subscription_plan.dart';
-import '../providers/auth_provider.dart';
+import '../models/subscription_info.dart';
+import '../models/token_usage.dart';
+import '../services/subscription_service.dart';
 
 class SubscriptionProvider extends ChangeNotifier {
-  List<SubscriptionPlan> _plans = [];
   bool _isLoading = false;
+  bool _isLoadingTokens = false;
   String _error = '';
+  SubscriptionInfo? _currentSubscription;
+  TokenUsage? _tokenUsage;
+  final SubscriptionService _subscriptionService = SubscriptionService();
 
-  // Getters
+  // Updated plans based on the image
+  final List<SubscriptionPlan> _plans = [
+    SubscriptionPlan(
+      id: 'basic',
+      name: 'Basic',
+      price: 0,
+      billingCycle: 'Free',
+      features: [
+        'AI Chat Model: GPT-3.5',
+        'AI Action Injection',
+        'Select Text for AI Action',
+        '50 free queries per day',
+        'AI Reading Assistant',
+        'Real-time Web Access',
+        'AI Writing Assistant',
+        'AI Pro Search',
+      ],
+    ),
+    SubscriptionPlan(
+      id: 'starter',
+      name: 'Starter',
+      price: 9.99,
+      billingCycle: 'month',
+      trialPeriod: '1-month Free Trial',
+      features: [
+        'AI Chat Models: GPT-3.5 & GPT-4.0/Turbo & Gemini Pro & Gemini Ultra',
+        'AI Action Injection',
+        'Select Text for AI Action',
+        'Unlimited queries per month',
+        'AI Reading Assistant',
+        'Real-time Web Access',
+        'AI Writing Assistant',
+        'AI Pro Search',
+        'Jira Copilot Assistant',
+        'Github Copilot Assistant',
+        'No request limits during high-traffic',
+      ],
+    ),
+    SubscriptionPlan(
+      id: 'pro',
+      name: 'Pro Annually',
+      price: 79.99,
+      billingCycle: 'year',
+      trialPeriod: '1-month Free Trial',
+      savePercentage: 'SAVE 33% ON ANNUAL PLAN!',
+      isPopular: true,
+      features: [
+        'AI Chat Models: GPT-3.5 & GPT-4.0/Turbo & Gemini Pro & Gemini Ultra',
+        'AI Action Injection',
+        'Select Text for AI Action',
+        'Unlimited queries per year',
+        'AI Reading Assistant',
+        'Real-time Web Access',
+        'AI Writing Assistant',
+        'AI Pro Search',
+        'Jira Copilot Assistant',
+        'Github Copilot Assistant',
+        'No request limits during high-traffic',
+      ],
+    ),
+  ];
+
   List<SubscriptionPlan> get plans => _plans;
   bool get isLoading => _isLoading;
+  bool get isLoadingTokens => _isLoadingTokens;
   String get error => _error;
+  SubscriptionInfo? get currentSubscription => _currentSubscription;
+  TokenUsage? get tokenUsage => _tokenUsage;
 
-  SubscriptionProvider() {
-    _initializePlans();
-  }
+  // Fetch current subscription info
+  Future<void> fetchCurrentSubscription() async {
+    _isLoading = true;
+    _error = '';
+    notifyListeners();
 
-  void _initializePlans() {
-    _plans = [
-      SubscriptionPlan(
-        id: 'free',
-        name: 'Free',
-        price: 0.0,
-        billingCycle: 'month',
-        features: [
-          '1,000 tokens per month',
-          'Access to Claude 3.5 Sonnet',
-          'Basic chat functionality',
-          'Standard response time',
-        ],
-        tokenAllowance: 1000,
-        modelLimit: 1,
-        hasAdvancedFeatures: false,
-      ),
-      SubscriptionPlan(
-        id: 'premium',
-        name: 'Premium',
-        price: 9.99,
-        billingCycle: 'month',
-        features: [
-          '10,000 tokens per month',
-          'Access to all AI models',
-          'Advanced chat features',
-          'Priority response time',
-          'Knowledge base integration',
-        ],
-        tokenAllowance: 10000,
-        modelLimit: 3,
-        hasAdvancedFeatures: true,
-      ),
-      SubscriptionPlan(
-        id: 'enterprise',
-        name: 'Enterprise',
-        price: 29.99,
-        billingCycle: 'month',
-        features: [
-          'Unlimited tokens',
-          'Access to all AI models',
-          'All advanced features',
-          'Fastest response time',
-          'Custom AI bot creation',
-          'Team collaboration',
-          'Priority support',
-        ],
-        tokenAllowance: 100000,
-        modelLimit: 10,
-        hasAdvancedFeatures: true,
-      ),
-    ];
-  }
-
-  // Get plan by ID
-  SubscriptionPlan? getPlanById(String planId) {
     try {
-      return _plans.firstWhere((plan) => plan.id == planId);
+      final subscription = await _subscriptionService.getCurrentSubscription();
+      _currentSubscription = subscription;
+      _isLoading = false;
+      notifyListeners();
+
+      // After fetching subscription, also fetch token usage
+      fetchTokenUsage();
     } catch (e) {
-      return null;
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Fetch token usage
+  Future<void> fetchTokenUsage() async {
+    _isLoadingTokens = true;
+    notifyListeners();
+
+    try {
+      final usage = await _subscriptionService.getTokenUsage();
+      _tokenUsage = usage;
+      _isLoadingTokens = false;
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching token usage: $e');
+      _isLoadingTokens = false;
+      notifyListeners();
     }
   }
 
   // Subscribe to a plan
-  Future<bool> subscribeToPlan(String planId) async {
-    try {
-      _isLoading = true;
-      _error = '';
-      notifyListeners();
-
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
-
-      // In a real app, you would call an API here
-      final plan = getPlanById(planId);
-      if (plan == null) {
-        _error = 'Plan not found';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-
-      // Update user's plan (this would be done by the backend in a real app)
-      // For demo purposes, we'll just update the AuthProvider
-      // This is a simplified implementation
-      
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  // Cancel subscription
-  Future<bool> cancelSubscription() async {
-    try {
-      _isLoading = true;
-      _error = '';
-      notifyListeners();
-
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
-
-      // In a real app, you would call an API here
-      
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  // Get token usage for current billing cycle
-  Future<Map<String, dynamic>> getTokenUsage() async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 1));
-
-      // Mock data
-      final usage = {
-        'used': 450,
-        'total': 1000,
-        'percentage': 45.0,
-        'resetDate': DateTime.now().add(const Duration(days: 15)),
-      };
-
-      _isLoading = false;
-      notifyListeners();
-      return usage;
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return {
-        'used': 0,
-        'total': 0,
-        'percentage': 0.0,
-        'resetDate': DateTime.now(),
-      };
-    }
-  }
-
-  // Purchase additional tokens
-  Future<bool> purchaseTokens(int amount) async {
-    try {
-      _isLoading = true;
-      _error = '';
-      notifyListeners();
-
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
-
-      // In a real app, you would call an API here
-      
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  // Clear error
-  void clearError() {
+  Future<bool> subscribeToPlan(String planId, String period) async {
+    _isLoading = true;
     _error = '';
     notifyListeners();
+
+    try {
+      final checkoutUrl = await _subscriptionService.subscribeToPlan(planId, period);
+
+      // Make sure the URL is valid
+      if (checkoutUrl == null || checkoutUrl.isEmpty) {
+        throw Exception('Received empty checkout URL');
+      }
+
+      // Print the URL for debugging
+      print('Checkout URL: $checkoutUrl');
+
+      // Try different launch modes if one fails
+      bool launched = false;
+
+      // First try with external application mode
+      try {
+        final Uri uri = Uri.parse(checkoutUrl);
+        if (await canLaunchUrl(uri)) {
+          launched = await launchUrl(
+            uri,
+            mode: LaunchMode.externalApplication,
+          );
+        }
+      } catch (e) {
+        print('Failed to launch in external mode: $e');
+      }
+
+      // If external mode failed, try with platform default
+      if (!launched) {
+        try {
+          final Uri uri = Uri.parse(checkoutUrl);
+          if (await canLaunchUrl(uri)) {
+            launched = await launchUrl(
+              uri,
+              mode: LaunchMode.platformDefault,
+            );
+          }
+        } catch (e) {
+          print('Failed to launch in platform default mode: $e');
+        }
+      }
+
+      // If platform default failed, try with in-app webview
+      if (!launched) {
+        try {
+          final Uri uri = Uri.parse(checkoutUrl);
+          if (await canLaunchUrl(uri)) {
+            launched = await launchUrl(
+              uri,
+              mode: LaunchMode.inAppWebView,
+              webViewConfiguration: const WebViewConfiguration(
+                enableJavaScript: true,
+                enableDomStorage: true,
+              ),
+            );
+          }
+        } catch (e) {
+          print('Failed to launch in in-app webview mode: $e');
+        }
+      }
+
+      if (!launched) {
+        throw Exception('Could not launch checkout URL after multiple attempts');
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
   }
 }
-
