@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 import '../models/subscription_plan.dart';
 import '../models/subscription_info.dart';
 import '../models/token_usage.dart';
@@ -12,6 +13,8 @@ class SubscriptionProvider extends ChangeNotifier {
   SubscriptionInfo? _currentSubscription;
   TokenUsage? _tokenUsage;
   final SubscriptionService _subscriptionService = SubscriptionService();
+  Timer? _tokenRefreshTimer;
+  final int _tokenRefreshInterval = 5; // Refresh interval in seconds
 
   // Updated plans based on the image
   final List<SubscriptionPlan> _plans = [
@@ -82,6 +85,21 @@ class SubscriptionProvider extends ChangeNotifier {
   SubscriptionInfo? get currentSubscription => _currentSubscription;
   TokenUsage? get tokenUsage => _tokenUsage;
 
+  // Add getters for token usage
+  bool get hasUnlimitedTokens => _tokenUsage?.unlimited ?? false;
+  int get availableTokens => _tokenUsage?.availableTokens ?? 0;
+  int get totalTokens => _tokenUsage?.totalTokens ?? 0;
+
+  // Add token availability percentage getter
+  double get tokenAvailabilityPercentage {
+    if (hasUnlimitedTokens) return 1.0; // Full bar for unlimited
+    if (totalTokens <= 0) return 0.0;
+    return availableTokens / totalTokens;
+  }
+
+  // Add hasTokens getter
+  bool get hasTokens => hasUnlimitedTokens || availableTokens > 0;
+
   // Fetch current subscription info
   Future<void> fetchCurrentSubscription() async {
     _isLoading = true;
@@ -95,7 +113,10 @@ class SubscriptionProvider extends ChangeNotifier {
       notifyListeners();
 
       // After fetching subscription, also fetch token usage
-      fetchTokenUsage();
+      await fetchTokenUsage();
+
+      // Start the token refresh timer
+      startTokenRefreshTimer();
     } catch (e) {
       _error = e.toString();
       _isLoading = false;
@@ -105,6 +126,7 @@ class SubscriptionProvider extends ChangeNotifier {
 
   // Fetch token usage
   Future<void> fetchTokenUsage() async {
+    print('Fetching token usage at ${DateTime.now()}');
     _isLoadingTokens = true;
     notifyListeners();
 
@@ -113,6 +135,7 @@ class SubscriptionProvider extends ChangeNotifier {
       _tokenUsage = usage;
       _isLoadingTokens = false;
       notifyListeners();
+      print('Token usage updated: ${usage.availableTokens}/${usage.totalTokens} (unlimited: ${usage.unlimited})');
     } catch (e) {
       print('Error fetching token usage: $e');
       _isLoadingTokens = false;
@@ -200,5 +223,32 @@ class SubscriptionProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  void startTokenRefreshTimer() {
+    // Cancel any existing timer first
+    stopTokenRefreshTimer();
+
+    // Create a new timer that fetches token usage every 5 seconds
+    _tokenRefreshTimer = Timer.periodic(Duration(seconds: _tokenRefreshInterval), (timer) {
+      fetchTokenUsage();
+    });
+
+    print('Token refresh timer started. Will refresh every $_tokenRefreshInterval seconds');
+  }
+
+  // Add this method to stop the token refresh timer
+  void stopTokenRefreshTimer() {
+    if (_tokenRefreshTimer != null) {
+      _tokenRefreshTimer!.cancel();
+      _tokenRefreshTimer = null;
+      print('Token refresh timer stopped');
+    }
+  }
+
+  @override
+  void dispose() {
+    stopTokenRefreshTimer();
+    super.dispose();
   }
 }

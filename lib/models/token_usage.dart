@@ -20,7 +20,7 @@ class TokenUsage {
     );
   }
 
-  // Default empty instance
+  // Default empty usage
   factory TokenUsage.empty() {
     return TokenUsage(
       availableTokens: 0,

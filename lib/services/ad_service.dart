@@ -1,306 +1,281 @@
-// import 'dart:io';
-// import 'package:flutter/foundation.dart';
-// import 'package:final_application/models/user_subscription.dart';
-// import 'package:final_application/services/subscription_service.dart';
-// import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-// class AdService {
-//   // Test ad units - replace with real ones for production
-//   static String _testBannerAdUnitId =
-//       Platform.isAndroid
-//           ? 'ca-app-pub-3940256099942544/6300978111'
-//           : 'ca-app-pub-3940256099942544/2934735716';
+class AdService {
+  // Singleton pattern
+  static final AdService _instance = AdService._internal();
 
-//   static String _testInterstitialAdUnitId =
-//       Platform.isAndroid
-//           ? 'ca-app-pub-3940256099942544/1033173712'
-//           : 'ca-app-pub-3940256099942544/4411468910';
+  factory AdService() => _instance;
 
-//   static String _testRewardedAdUnitId =
-//       Platform.isAndroid
-//           ? 'ca-app-pub-3940256099942544/5224354917'
-//           : 'ca-app-pub-3940256099942544/1712485313';
+  AdService._internal();
 
-//   // Subscription service
-//   final SubscriptionService _subscriptionService = SubscriptionService.instance;
+  // Your actual AdMob app ID
+  static const String appId = 'ca-app-pub-5917361125307707~7798342779';
 
-//   // Banner ad
-//   BannerAd? _bannerAd;
-//   bool _isBannerAdLoaded = false;
+  // Ad unit IDs - Replace with your actual ad units in production
+  static String get bannerAdUnitId {
+    if (Platform.isAndroid) {
+      return kDebugMode
+          ? 'ca-app-pub-3940256099942544/6300978111' // Test ad unit
+          : 'ca-app-pub-5917361125307707/XXXXXXXXXX'; // Your Android ad unit
+    } else if (Platform.isIOS) {
+      return kDebugMode
+          ? 'ca-app-pub-3940256099942544/2934735716' // Test ad unit
+          : 'ca-app-pub-5917361125307707/XXXXXXXXXX'; // Your iOS ad unit
+    } else {
+      throw UnsupportedError('Unsupported platform');
+    }
+  }
 
-//   // Interstitial ad
-//   InterstitialAd? _interstitialAd;
-//   bool _isInterstitialAdLoaded = false;
+  static String get interstitialAdUnitId {
+    if (Platform.isAndroid) {
+      return kDebugMode
+          ? 'ca-app-pub-3940256099942544/1033173712' // Test ad unit
+          : 'ca-app-pub-5917361125307707/XXXXXXXXXX'; // Your Android ad unit
+    } else if (Platform.isIOS) {
+      return kDebugMode
+          ? 'ca-app-pub-3940256099942544/4411468910' // Test ad unit
+          : 'ca-app-pub-5917361125307707/XXXXXXXXXX'; // Your iOS ad unit
+    } else {
+      throw UnsupportedError('Unsupported platform');
+    }
+  }
 
-//   // Rewarded ad
-//   RewardedAd? _rewardedAd;
-//   bool _isRewardedAdLoaded = false;
+  static String get rewardedAdUnitId {
+    if (Platform.isAndroid) {
+      return kDebugMode
+          ? 'ca-app-pub-3940256099942544/5224354917' // Test ad unit
+          : 'ca-app-pub-5917361125307707/XXXXXXXXXX'; // Your Android ad unit
+    } else if (Platform.isIOS) {
+      return kDebugMode
+          ? 'ca-app-pub-3940256099942544/1712485313' // Test ad unit
+          : 'ca-app-pub-5917361125307707/XXXXXXXXXX'; // Your iOS ad unit
+    } else {
+      throw UnsupportedError('Unsupported platform');
+    }
+  }
 
-//   // Flag to indicate if ads are enabled
-//   bool _adsEnabled = false;
-//   bool _isInitialized = false;
+  // Banner ad
+  BannerAd? _bannerAd;
+  bool _isBannerAdLoaded = false;
 
-//   // Getters
-//   BannerAd? get bannerAd => _bannerAd;
-//   bool get isBannerAdLoaded => _isBannerAdLoaded;
-//   bool get isInterstitialAdLoaded => _isInterstitialAdLoaded;
-//   bool get isRewardedAdLoaded => _isRewardedAdLoaded;
-//   bool get adsEnabled => _adsEnabled;
-//   bool get isInitialized => _isInitialized;
+  // Interstitial ad
+  InterstitialAd? _interstitialAd;
+  bool _isInterstitialAdLoaded = false;
+  int _interstitialLoadAttempts = 0;
+  final int _maxInterstitialLoadAttempts = 3;
 
-//   // Singleton pattern with proper initialization
-//   static AdService? _instance;
-//   static AdService get instance {
-//     _instance ??= AdService._internal();
-//     return _instance!;
-//   }
+  // Rewarded ad
+  RewardedAd? _rewardedAd;
+  bool _isRewardedAdLoaded = false;
+  int _rewardedLoadAttempts = 0;
+  final int _maxRewardedLoadAttempts = 3;
 
-//   factory AdService() => instance;
+  // Getters
+  bool get isBannerAdLoaded => _isBannerAdLoaded;
 
-//   AdService._internal();
+  bool get isInterstitialAdLoaded => _isInterstitialAdLoaded;
 
-//   // Initialize the service
-//   Future<void> init() async {
-//     if (_isInitialized) return;
+  bool get isRewardedAdLoaded => _isRewardedAdLoaded;
 
-//     try {
-//       // Temporarily disable ads completely to avoid crashes
-//       print('Ads disabled temporarily');
-//       _adsEnabled = false;
-//       _isInitialized = true;
-//       return;
+  BannerAd? get bannerAd => _bannerAd;
 
-//       // The code below is commented out until proper AdMob setup is done
-//       /*
-//       await MobileAds.instance.initialize();
-//       _adsEnabled = true;
-      
-//       // Only load ads for free users
-//       if (!_subscriptionService.subscription.isProActive) {
-//         loadBannerAd();
-//         loadInterstitialAd();
-//         loadRewardedAd();
-//       }
-      
-//       // Listen for subscription changes
-//       _subscriptionService.subscriptionStream.listen((subscription) {
-//         if (subscription.isProActive) {
-//           // Dispose ads for Pro users
-//           disposeBannerAd();
-//           disposeInterstitialAd();
-//           disposeRewardedAd();
-//         } else if (_adsEnabled) {
-//           // Reload ads for free users
-//           loadBannerAd();
-//           loadInterstitialAd();
-//           loadRewardedAd();
-//         }
-//       });
-//       */
-//     } catch (e) {
-//       print('Failed to initialize ads: $e');
-//       _adsEnabled = false;
-//       _isInitialized =
-//           true; // Still mark as initialized to avoid repeated attempts
-//     }
-//   }
+  // Initialize the Mobile Ads SDK
+  Future<void> initialize() async {
+    // Request non-personalized ads only
+    final params = RequestConfiguration(
+      tagForChildDirectedTreatment: TagForChildDirectedTreatment.unspecified,
+      tagForUnderAgeOfConsent: TagForUnderAgeOfConsent.unspecified,
+      maxAdContentRating: MaxAdContentRating.pg,
+      testDeviceIds: ['kGADSimulatorID'], // Add your test device IDs here
+    );
+    MobileAds.instance.updateRequestConfiguration(params);
 
-//   // Load a banner ad
-//   void loadBannerAd() {
-//     if (!_adsEnabled) return;
+    // Load initial ads
+    loadBannerAd();
+    loadInterstitialAd();
+    loadRewardedAd();
+  }
 
-//     try {
-//       _bannerAd = BannerAd(
-//         adUnitId: _testBannerAdUnitId,
-//         size: AdSize.banner,
-//         request: const AdRequest(),
-//         listener: BannerAdListener(
-//           onAdLoaded: (ad) {
-//             _isBannerAdLoaded = true;
-//           },
-//           onAdFailedToLoad: (ad, error) {
-//             ad.dispose();
-//             _bannerAd = null;
-//             _isBannerAdLoaded = false;
-//             print('Banner ad failed to load: $error');
-//           },
-//         ),
-//       );
+  // Load banner ad
+  void loadBannerAd() {
+    _bannerAd = BannerAd(
+      adUnitId: bannerAdUnitId,
+      size: AdSize.banner,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (_) {
+          debugPrint('Banner ad loaded successfully');
+          _isBannerAdLoaded = true;
+        },
+        onAdFailedToLoad: (ad, error) {
+          debugPrint('Banner ad failed to load: ${error.message}');
+          ad.dispose();
+          _isBannerAdLoaded = false;
 
-//       _bannerAd?.load();
-//     } catch (e) {
-//       print('Error loading banner ad: $e');
-//       _isBannerAdLoaded = false;
-//     }
-//   }
+          // Retry after a delay
+          Future.delayed(const Duration(minutes: 1), () {
+            if (_bannerAd == null) {
+              loadBannerAd();
+            }
+          });
+        },
+        onAdOpened: (ad) => debugPrint('Banner ad opened'),
+        onAdClosed: (ad) => debugPrint('Banner ad closed'),
+      ),
+    );
 
-//   // Load an interstitial ad
-//   void loadInterstitialAd() {
-//     if (!_adsEnabled) return;
+    _bannerAd!.load();
+  }
 
-//     try {
-//       InterstitialAd.load(
-//         adUnitId: _testInterstitialAdUnitId,
-//         request: const AdRequest(),
-//         adLoadCallback: InterstitialAdLoadCallback(
-//           onAdLoaded: (ad) {
-//             _interstitialAd = ad;
-//             _isInterstitialAdLoaded = true;
-//           },
-//           onAdFailedToLoad: (error) {
-//             _isInterstitialAdLoaded = false;
-//             print('Interstitial ad failed to load: $error');
-//           },
-//         ),
-//       );
-//     } catch (e) {
-//       print('Error loading interstitial ad: $e');
-//       _isInterstitialAdLoaded = false;
-//     }
-//   }
+  // Load interstitial ad
+  void loadInterstitialAd() {
+    InterstitialAd.load(
+      adUnitId: interstitialAdUnitId,
+      request: const AdRequest(),
+      adLoadCallback: InterstitialAdLoadCallback(
+        onAdLoaded: (InterstitialAd ad) {
+          debugPrint('Interstitial ad loaded successfully');
+          _interstitialAd = ad;
+          _isInterstitialAdLoaded = true;
+          _interstitialLoadAttempts = 0;
 
-//   // Load a rewarded ad
-//   void loadRewardedAd() {
-//     if (!_adsEnabled) return;
+          // Set callback for ad closing
+          _interstitialAd!.fullScreenContentCallback =
+              FullScreenContentCallback(
+            onAdDismissedFullScreenContent: (ad) {
+              debugPrint('Interstitial ad dismissed');
+              ad.dispose();
+              _isInterstitialAdLoaded = false;
+              loadInterstitialAd(); // Load the next interstitial
+            },
+            onAdFailedToShowFullScreenContent: (ad, error) {
+              debugPrint('Interstitial ad failed to show: ${error.message}');
+              ad.dispose();
+              _isInterstitialAdLoaded = false;
+              loadInterstitialAd(); // Try to load another one
+            },
+            onAdShowedFullScreenContent: (ad) {
+              debugPrint('Interstitial ad showed successfully');
+            },
+          );
+        },
+        onAdFailedToLoad: (LoadAdError error) {
+          debugPrint('Interstitial ad failed to load: ${error.message}');
+          _isInterstitialAdLoaded = false;
+          _interstitialLoadAttempts += 1;
+          _interstitialAd = null;
 
-//     try {
-//       RewardedAd.load(
-//         adUnitId: _testRewardedAdUnitId,
-//         request: const AdRequest(),
-//         rewardedAdLoadCallback: RewardedAdLoadCallback(
-//           onAdLoaded: (ad) {
-//             _rewardedAd = ad;
-//             _isRewardedAdLoaded = true;
-//           },
-//           onAdFailedToLoad: (error) {
-//             _isRewardedAdLoaded = false;
-//             print('Rewarded ad failed to load: $error');
-//           },
-//         ),
-//       );
-//     } catch (e) {
-//       print('Error loading rewarded ad: $e');
-//       _isRewardedAdLoaded = false;
-//     }
-//   }
+          if (_interstitialLoadAttempts < _maxInterstitialLoadAttempts) {
+            Future.delayed(const Duration(minutes: 1), () {
+              loadInterstitialAd();
+            });
+          }
+        },
+      ),
+    );
+  }
 
-//   // Show an interstitial ad
-//   Future<void> showInterstitialAd() async {
-//     if (!_adsEnabled || !_isInitialized) return;
+  // Show interstitial ad
+  Future<bool> showInterstitialAd() async {
+    if (_interstitialAd == null) {
+      debugPrint('Interstitial ad not loaded yet');
+      return false;
+    }
 
-//     if (_subscriptionService.subscription.isProActive) {
-//       return; // Don't show ads to Pro users
-//     }
+    try {
+      await _interstitialAd!.show();
+      return true;
+    } catch (e) {
+      debugPrint('Error showing interstitial ad: $e');
+      _interstitialAd!.dispose();
+      _isInterstitialAdLoaded = false;
+      loadInterstitialAd(); // Try to load another one
+      return false;
+    }
+  }
 
-//     if (!_isInterstitialAdLoaded) {
-//       loadInterstitialAd();
-//       return;
-//     }
+  // Load rewarded ad
+  void loadRewardedAd() {
+    RewardedAd.load(
+      adUnitId: rewardedAdUnitId,
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (RewardedAd ad) {
+          debugPrint('Rewarded ad loaded successfully');
+          _rewardedAd = ad;
+          _isRewardedAdLoaded = true;
+          _rewardedLoadAttempts = 0;
 
-//     try {
-//       _interstitialAd?.fullScreenContentCallback = FullScreenContentCallback(
-//         onAdDismissedFullScreenContent: (ad) {
-//           ad.dispose();
-//           _isInterstitialAdLoaded = false;
-//           loadInterstitialAd();
-//         },
-//         onAdFailedToShowFullScreenContent: (ad, error) {
-//           ad.dispose();
-//           _isInterstitialAdLoaded = false;
-//           loadInterstitialAd();
-//           print('Failed to show interstitial ad: $error');
-//         },
-//       );
+          // Set callback for ad closing
+          _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
+            onAdDismissedFullScreenContent: (ad) {
+              debugPrint('Rewarded ad dismissed');
+              ad.dispose();
+              _isRewardedAdLoaded = false;
+              loadRewardedAd(); // Load the next rewarded ad
+            },
+            onAdFailedToShowFullScreenContent: (ad, error) {
+              debugPrint('Rewarded ad failed to show: ${error.message}');
+              ad.dispose();
+              _isRewardedAdLoaded = false;
+              loadRewardedAd(); // Try to load another one
+            },
+            onAdShowedFullScreenContent: (ad) {
+              debugPrint('Rewarded ad showed successfully');
+            },
+          );
+        },
+        onAdFailedToLoad: (LoadAdError error) {
+          debugPrint('Rewarded ad failed to load: ${error.message}');
+          _isRewardedAdLoaded = false;
+          _rewardedLoadAttempts += 1;
+          _rewardedAd = null;
 
-//       await _interstitialAd?.show();
-//     } catch (e) {
-//       print('Error showing interstitial ad: $e');
-//     }
-//   }
+          if (_rewardedLoadAttempts < _maxRewardedLoadAttempts) {
+            Future.delayed(const Duration(minutes: 1), () {
+              loadRewardedAd();
+            });
+          }
+        },
+      ),
+    );
+  }
 
-//   // Show a rewarded ad
-//   Future<void> showRewardedAd({Function(RewardItem)? onRewarded}) async {
-//     // Always give the reward regardless of ad status for now
-//     onRewarded?.call(RewardItem(5, 'tokens'));
-//     return;
+  // Show rewarded ad
+  Future<bool> showRewardedAd(
+      {required Function(RewardItem reward) onUserEarnedReward}) async {
+    if (_rewardedAd == null) {
+      debugPrint('Rewarded ad not loaded yet');
+      return false;
+    }
 
-//     /*
-//     if (_subscriptionService.subscription.isProActive) {
-//       // Pro users automatically get the reward
-//       onRewarded?.call(const RewardItem(amount: 5, type: 'tokens'));
-//       return;
-//     }
-    
-//     if (!_adsEnabled || !_isInitialized) {
-//       // If ads are disabled, still give the reward
-//       onRewarded?.call(const RewardItem(amount: 5, type: 'tokens'));
-//       return;
-//     }
-    
-//     if (!_isRewardedAdLoaded) {
-//       loadRewardedAd();
-//       // Still give the reward in debug mode
-//       if (kDebugMode) {
-//         onRewarded?.call(const RewardItem(amount: 5, type: 'tokens'));
-//       }
-//       return;
-//     }
-    
-//     try {
-//       _rewardedAd?.fullScreenContentCallback = FullScreenContentCallback(
-//         onAdDismissedFullScreenContent: (ad) {
-//           ad.dispose();
-//           _isRewardedAdLoaded = false;
-//           loadRewardedAd();
-//         },
-//         onAdFailedToShowFullScreenContent: (ad, error) {
-//           ad.dispose();
-//           _isRewardedAdLoaded = false;
-//           loadRewardedAd();
-//           print('Failed to show rewarded ad: $error');
-//         },
-//       );
-      
-//       await _rewardedAd?.show(
-//         onUserEarnedReward: (ad, reward) {
-//           onRewarded?.call(reward);
-//         },
-//       );
-//     } catch (e) {
-//       print('Error showing rewarded ad: $e');
-//       // Still give the reward in debug mode
-//       if (kDebugMode) {
-//         onRewarded?.call(const RewardItem(amount: 5, type: 'tokens'));
-//       }
-//     }
-//     */
-//   }
+    try {
+      await _rewardedAd!.show(
+          onUserEarnedReward: (AdWithoutView ad, RewardItem reward) {
+        onUserEarnedReward(reward);
+      });
+      return true;
+    } catch (e) {
+      debugPrint('Error showing rewarded ad: $e');
+      _rewardedAd!.dispose();
+      _isRewardedAdLoaded = false;
+      loadRewardedAd(); // Try to load another one
+      return false;
+    }
+  }
 
-//   // Dispose of banner ad
-//   void disposeBannerAd() {
-//     _bannerAd?.dispose();
-//     _bannerAd = null;
-//     _isBannerAdLoaded = false;
-//   }
-
-//   // Dispose of interstitial ad
-//   void disposeInterstitialAd() {
-//     _interstitialAd?.dispose();
-//     _interstitialAd = null;
-//     _isInterstitialAdLoaded = false;
-//   }
-
-//   // Dispose of rewarded ad
-//   void disposeRewardedAd() {
-//     _rewardedAd?.dispose();
-//     _rewardedAd = null;
-//     _isRewardedAdLoaded = false;
-//   }
-
-//   // Dispose of all resources
-//   void dispose() {
-//     disposeBannerAd();
-//     disposeInterstitialAd();
-//     disposeRewardedAd();
-//   }
-// }
+  // Dispose ads
+  void dispose() {
+    _bannerAd?.dispose();
+    _interstitialAd?.dispose();
+    _rewardedAd?.dispose();
+    _bannerAd = null;
+    _interstitialAd = null;
+    _rewardedAd = null;
+    _isBannerAdLoaded = false;
+    _isInterstitialAdLoaded = false;
+    _isRewardedAdLoaded = false;
+  }
+}

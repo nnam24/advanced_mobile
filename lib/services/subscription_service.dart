@@ -98,7 +98,7 @@ class SubscriptionService {
     }
   }
 
-  // Get token usage information
+  // Get token usage
   Future<TokenUsage> getTokenUsage() async {
     final token = await _getAuthToken();
 
@@ -122,12 +122,12 @@ class SubscriptionService {
         final responseData = json.decode(response.body);
         return TokenUsage.fromJson(responseData);
       } else {
-        // If API fails, return empty token usage
-        print('Failed to fetch token usage: ${response.statusCode}');
+        // If API fails, return empty usage
         return TokenUsage.empty();
       }
     } catch (e) {
       print('Error fetching token usage: $e');
+      // Return empty usage in case of error
       return TokenUsage.empty();
     }
   }

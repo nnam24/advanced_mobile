@@ -6,9 +6,11 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/prompt_provider.dart';
 import '../models/prompt.dart';
+import '../providers/subscription_provider.dart';
 import '../widgets/animated_background.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_history_drawer.dart';
+import 'ad/earn_tokens_screen.dart';
 import 'profile/profile_screen.dart';
 import 'auth/login_screen.dart';
 import 'ai_bot/ai_bot_list_screen.dart';
@@ -971,6 +973,7 @@ class _HomeScreenState extends State<HomeScreen>
                   Column(
                     children: [
                       // Token indicator
+                      // Replace the existing token indicator with this updated version
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 4),
@@ -978,37 +981,62 @@ class _HomeScreenState extends State<HomeScreen>
                             .colorScheme
                             .surface
                             .withOpacity(0.8),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.token,
-                              size: 16,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: LinearProgressIndicator(
-                                value: chatProvider.tokenAvailabilityPercentage,
-                                backgroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .surfaceVariant,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  chatProvider.tokenAvailabilityPercentage > 0.2
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Colors.red,
+                        child: Consumer<SubscriptionProvider>(
+                          builder: (context, subscriptionProvider, child) {
+                            return Row(
+                              children: [
+                                Icon(
+                                  Icons.token,
+                                  size: 16,
+                                  color: Theme.of(context).colorScheme.primary,
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${chatProvider.availableTokens} / ${chatProvider.tokenLimit}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          ],
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: subscriptionProvider.isLoadingTokens
+                                      ? LinearProgressIndicator(
+                                    backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Theme.of(context).colorScheme.primary,
+                                    ),
+                                  )
+                                      : LinearProgressIndicator(
+                                    value: subscriptionProvider.tokenAvailabilityPercentage,
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .surfaceVariant,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      subscriptionProvider.tokenAvailabilityPercentage > 0.2
+                                          ? Theme.of(context).colorScheme.primary
+                                          : Colors.red,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // subscriptionProvider.isLoadingTokens
+                                //     ? SizedBox(
+                                //   width: 16,
+                                //   height: 16,
+                                //   child: CircularProgressIndicator(
+                                //     strokeWidth: 2,
+                                //     valueColor: AlwaysStoppedAnimation<Color>(
+                                //       Theme.of(context).colorScheme.primary,
+                                //     ),
+                                //   ),
+                                // )
+                                //     :
+                                Text(
+                                  subscriptionProvider.hasUnlimitedTokens
+                                      ? 'Unlimited'
+                                      : '${subscriptionProvider.availableTokens} / ${subscriptionProvider.totalTokens}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ),
 
@@ -1441,6 +1469,20 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 );
               });
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.token),
+            title: const Text('Earn Free Tokens'),
+            onTap: () {
+              // Close the drawer
+              Navigator.pop(context);
+
+              // Navigate to the Earn Tokens screen
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const EarnTokensScreen()),
+              );
             },
           ),
         ],

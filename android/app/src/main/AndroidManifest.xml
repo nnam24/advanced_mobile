@@ -36,7 +36,7 @@
     <!-- Add this meta-data tag for AdMob with a valid test ID -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713"/>
+            android:value="ca-app-pub-5917361125307707~7798342779"/>
 
         <!-- Optional: Disable the MobileAdsInitProvider -->
         <provider
@@ -44,7 +44,6 @@
             android:authorities="com.example.mobileadsinitprovider"
             android:exported="false"
             tools:node="remove" />
-
         <activity
             android:name=".MainActivity"
             android:exported="true"

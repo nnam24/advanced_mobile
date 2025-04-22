@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 import '../models/user.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -421,6 +422,7 @@ class AuthProvider extends ChangeNotifier {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         _token = responseData['access_token'];
+        _refreshToken = responseData['refresh_token'];
 
         // Update token expiry time (10 minutes from now)
         _tokenExpiryTime = DateTime.now().add(const Duration(minutes: 10));
@@ -428,6 +430,7 @@ class AuthProvider extends ChangeNotifier {
         // Update stored tokens
         final prefs = await SharedPreferences.getInstance();
         prefs.setString('access_token', _token!);
+        prefs.setString('refresh_token', _refreshToken!);
         prefs.setString('token_expiry', _tokenExpiryTime!.toIso8601String());
 
         // Reset the timer for the next refresh
@@ -575,4 +578,3 @@ class AuthProvider extends ChangeNotifier {
     super.dispose();
   }
 }
-

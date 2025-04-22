@@ -3,28 +3,31 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart'; // Add this import
 
 import 'models/conversation.dart';
 import 'models/user.dart';
-import 'models/message.dart';
-import 'models/ai_bot.dart';
 import 'models/knowledge_item.dart';
 import 'models/subscription_plan.dart';
 import 'providers/auth_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/subscription_provider.dart';
 import 'providers/prompt_provider.dart';
+import 'providers/ad_provider.dart'; // Add this import
 import 'services/ai_bot_service.dart';
-import 'services/prompt_service.dart'; // Added import for PromptService
+import 'services/prompt_service.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'utils/memory_management.dart';
 
 // Optimize the main function to improve app startup performance
-void main() {
+void main() async { // Changed to async
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Google Mobile Ads SDK
+  await MobileAds.instance.initialize();
 
   // Set system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(
@@ -43,6 +46,7 @@ void main() {
   // Create instances that require parameters
   final promptService = PromptService();
   final promptProvider = PromptProvider(promptService: promptService);
+  final adProvider = AdProvider(); // Create AdProvider instance
 
   // Run the app with optimized providers
   runApp(
@@ -55,15 +59,31 @@ void main() {
         ChangeNotifierProvider.value(value: AIBotService()),
         ChangeNotifierProvider.value(value: SubscriptionProvider()),
         ChangeNotifierProvider.value(
-            value: promptProvider), // Updated to use the pre-created instance
+            value: promptProvider),
+        ChangeNotifierProvider.value(value: adProvider), // Add AdProvider
       ],
       child: const JarvisApp(),
     ),
   );
 }
 
-class JarvisApp extends StatelessWidget {
+class JarvisApp extends StatefulWidget {
   const JarvisApp({super.key});
+
+  @override
+  State<JarvisApp> createState() => _JarvisAppState();
+}
+
+class _JarvisAppState extends State<JarvisApp> {
+  @override
+  void initState() {
+    super.initState();
+
+    // Initialize ads after the app is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<AdProvider>(context, listen: false).initialize();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
