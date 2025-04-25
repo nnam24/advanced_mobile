@@ -17,7 +17,7 @@ class AdService {
   static String get bannerAdUnitId {
     if (Platform.isAndroid) {
       return kDebugMode
-          ? 'ca-app-pub-3940256099942544/6300978111' // Test ad unit
+          ? 'ca-app-pub-5917361125307707/2127524757' // Test ad unit
           : 'ca-app-pub-5917361125307707/XXXXXXXXXX'; // Your Android ad unit
     } else if (Platform.isIOS) {
       return kDebugMode
@@ -31,7 +31,7 @@ class AdService {
   static String get interstitialAdUnitId {
     if (Platform.isAndroid) {
       return kDebugMode
-          ? 'ca-app-pub-3940256099942544/1033173712' // Test ad unit
+          ? 'ca-app-pub-5917361125307707/6066769764' // Test ad unit
           : 'ca-app-pub-5917361125307707/XXXXXXXXXX'; // Your Android ad unit
     } else if (Platform.isIOS) {
       return kDebugMode
@@ -45,7 +45,7 @@ class AdService {
   static String get rewardedAdUnitId {
     if (Platform.isAndroid) {
       return kDebugMode
-          ? 'ca-app-pub-3940256099942544/5224354917' // Test ad unit
+          ? 'ca-app-pub-5917361125307707/3440606425' // Test ad unit
           : 'ca-app-pub-5917361125307707/XXXXXXXXXX'; // Your Android ad unit
     } else if (Platform.isIOS) {
       return kDebugMode
