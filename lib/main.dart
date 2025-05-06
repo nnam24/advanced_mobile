@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:jarvis_ai_application/providers/email_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
@@ -61,6 +62,7 @@ void main() async { // Changed to async
         ChangeNotifierProvider.value(
             value: promptProvider),
         ChangeNotifierProvider.value(value: adProvider), // Add AdProvider
+        ChangeNotifierProvider(create: (_) => EmailProvider()), // Add this line
       ],
       child: const JarvisApp(),
     ),

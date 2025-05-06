@@ -6,9 +6,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/conversation.dart';
 import '../models/message.dart';
-import '../models/chat_history.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
+
 
 class ChatProvider extends ChangeNotifier {
   List<Conversation> _conversations = [];

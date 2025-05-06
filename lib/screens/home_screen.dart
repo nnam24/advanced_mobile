@@ -55,6 +55,12 @@ class _HomeScreenState extends State<HomeScreen>
     // Check authentication status
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final subscriptionProvider = Provider.of<SubscriptionProvider>(context, listen: false);
+
+      // Fetch current subscription information
+      subscriptionProvider.fetchCurrentSubscription();
+
+
       if (!authProvider.isAuthenticated) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -789,6 +795,8 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final chatProvider = Provider.of<ChatProvider>(context);
+    final subscriptionProvider =
+        Provider.of<SubscriptionProvider>(context);
     final currentConversation = chatProvider.currentConversation;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final mediaQuery = MediaQuery.of(context);
@@ -994,22 +1002,33 @@ class _HomeScreenState extends State<HomeScreen>
                                 Expanded(
                                   child: subscriptionProvider.isLoadingTokens
                                       ? LinearProgressIndicator(
-                                    backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Theme.of(context).colorScheme.primary,
-                                    ),
-                                  )
+                                          backgroundColor: Theme.of(context)
+                                              .colorScheme
+                                              .surfaceVariant,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                            Theme.of(context)
+                                                .colorScheme
+                                                .primary,
+                                          ),
+                                        )
                                       : LinearProgressIndicator(
-                                    value: subscriptionProvider.tokenAvailabilityPercentage,
-                                    backgroundColor: Theme.of(context)
-                                        .colorScheme
-                                        .surfaceVariant,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      subscriptionProvider.tokenAvailabilityPercentage > 0.2
-                                          ? Theme.of(context).colorScheme.primary
-                                          : Colors.red,
-                                    ),
-                                  ),
+                                          value: subscriptionProvider
+                                              .tokenAvailabilityPercentage,
+                                          backgroundColor: Theme.of(context)
+                                              .colorScheme
+                                              .surfaceVariant,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                            subscriptionProvider
+                                                        .tokenAvailabilityPercentage >
+                                                    0.2
+                                                ? Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                                : Colors.red,
+                                          ),
+                                        ),
                                 ),
                                 const SizedBox(width: 8),
                                 // subscriptionProvider.isLoadingTokens
@@ -1031,7 +1050,8 @@ class _HomeScreenState extends State<HomeScreen>
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.onSurface,
+                                    color:
+                                        Theme.of(context).colorScheme.onSurface,
                                   ),
                                 ),
                               ],
@@ -1222,7 +1242,7 @@ class _HomeScreenState extends State<HomeScreen>
                                     controller: _messageController,
                                     focusNode: _messageFocusNode,
                                     decoration: InputDecoration(
-                                      hintText: chatProvider.hasTokens
+                                      hintText: (chatProvider.hasTokens)
                                           ? 'Type a message...'
                                           : 'Out of tokens',
                                       hintStyle: const TextStyle(fontSize: 14),
@@ -1253,7 +1273,7 @@ class _HomeScreenState extends State<HomeScreen>
                                     minLines: 1,
                                     textInputAction: TextInputAction.newline,
                                     keyboardType: TextInputType.multiline,
-                                    enabled: chatProvider.hasTokens,
+                                    enabled: chatProvider.hasTokens ,
                                   ),
                                 ),
                               ),
@@ -1262,7 +1282,7 @@ class _HomeScreenState extends State<HomeScreen>
                                 icon: const Icon(Icons.send, size: 20),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
-                                onPressed: chatProvider.hasTokens
+                                onPressed:(chatProvider.hasTokens)
                                     ? _sendMessage
                                     : null,
                                 color: Theme.of(context).colorScheme.primary,
@@ -1481,7 +1501,8 @@ class _HomeScreenState extends State<HomeScreen>
               // Navigate to the Earn Tokens screen
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const EarnTokensScreen()),
+                MaterialPageRoute(
+                    builder: (context) => const EarnTokensScreen()),
               );
             },
           ),
