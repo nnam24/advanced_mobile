@@ -18,7 +18,7 @@ class AdService {
     if (Platform.isAndroid) {
       return kDebugMode
           ? 'ca-app-pub-5917361125307707/2127524757' // Test ad unit
-          : 'ca-app-pub-5917361125307707/XXXXXXXXXX'; // Your Android ad unit
+          : 'ca-app-pub-5917361125307707/2127524757'; // Your Android ad unit
     } else if (Platform.isIOS) {
       return kDebugMode
           ? 'ca-app-pub-3940256099942544/2934735716' // Test ad unit
@@ -32,7 +32,7 @@ class AdService {
     if (Platform.isAndroid) {
       return kDebugMode
           ? 'ca-app-pub-5917361125307707/6066769764' // Test ad unit
-          : 'ca-app-pub-5917361125307707/XXXXXXXXXX'; // Your Android ad unit
+          : 'ca-app-pub-5917361125307707/6066769764'; // Your Android ad unit
     } else if (Platform.isIOS) {
       return kDebugMode
           ? 'ca-app-pub-3940256099942544/4411468910' // Test ad unit
@@ -46,7 +46,7 @@ class AdService {
     if (Platform.isAndroid) {
       return kDebugMode
           ? 'ca-app-pub-5917361125307707/3440606425' // Test ad unit
-          : 'ca-app-pub-5917361125307707/XXXXXXXXXX'; // Your Android ad unit
+          : 'ca-app-pub-5917361125307707/3440606425'; // Your Android ad unit
     } else if (Platform.isIOS) {
       return kDebugMode
           ? 'ca-app-pub-3940256099942544/1712485313' // Test ad unit
