@@ -9,6 +9,10 @@ class AIBot {
   final List<String> knowledgeIds;
   final bool isPublished;
   final Map<String, String> publishedChannels;
+  final String? openAiAssistantId;
+  final String? openAiThreadIdPlay;
+  final String? createdBy;
+  final String? updatedBy;
 
   AIBot({
     required this.id,
@@ -21,7 +25,26 @@ class AIBot {
     required this.knowledgeIds,
     required this.isPublished,
     required this.publishedChannels,
+    this.openAiAssistantId,
+    this.openAiThreadIdPlay,
+    this.createdBy,
+    this.updatedBy,
   });
+
+  factory AIBot.empty() {
+    return AIBot(
+      id: '',
+      name: '',
+      description: '',
+      instructions: '',
+      avatarUrl: '',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      knowledgeIds: [],
+      isPublished: false,
+      publishedChannels: {},
+    );
+  }
 
   AIBot copyWith({
     String? id,
@@ -34,6 +57,10 @@ class AIBot {
     List<String>? knowledgeIds,
     bool? isPublished,
     Map<String, String>? publishedChannels,
+    String? openAiAssistantId,
+    String? openAiThreadIdPlay,
+    String? createdBy,
+    String? updatedBy,
   }) {
     return AIBot(
       id: id ?? this.id,
@@ -46,60 +73,45 @@ class AIBot {
       knowledgeIds: knowledgeIds ?? this.knowledgeIds,
       isPublished: isPublished ?? this.isPublished,
       publishedChannels: publishedChannels ?? this.publishedChannels,
-    );
-  }
-
-  factory AIBot.empty() {
-    return AIBot(
-      id: '',
-      name: '',
-      description: '',
-      instructions: 'You are a helpful AI assistant.',
-      avatarUrl: '',
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-      knowledgeIds: [],
-      isPublished: false,
-      publishedChannels: {},
-    );
-  }
-
-  factory AIBot.fromJson(Map<String, dynamic> json) {
-    return AIBot(
-      id: json['id'] ?? '',
-      name: json['name'] ?? '',
-      description: json['description'] ?? '',
-      instructions: json['instructions'] ?? '',
-      avatarUrl: json['avatarUrl'] ?? '',
-      createdAt: json['createdAt'] != null 
-          ? DateTime.parse(json['createdAt']) 
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] != null 
-          ? DateTime.parse(json['updatedAt']) 
-          : DateTime.now(),
-      knowledgeIds: json['knowledgeIds'] != null 
-          ? List<String>.from(json['knowledgeIds']) 
-          : [],
-      isPublished: json['isPublished'] ?? false,
-      publishedChannels: json['publishedChannels'] != null 
-          ? Map<String, String>.from(json['publishedChannels']) 
-          : {},
+      openAiAssistantId: openAiAssistantId ?? this.openAiAssistantId,
+      openAiThreadIdPlay: openAiThreadIdPlay ?? this.openAiThreadIdPlay,
+      createdBy: createdBy ?? this.createdBy,
+      updatedBy: updatedBy ?? this.updatedBy,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
-      'name': name,
+      'assistantName': name,
       'description': description,
       'instructions': instructions,
-      'avatarUrl': avatarUrl,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
-      'knowledgeIds': knowledgeIds,
-      'isPublished': isPublished,
-      'publishedChannels': publishedChannels,
     };
   }
-}
 
+  factory AIBot.fromJson(Map<String, dynamic> json) {
+    return AIBot(
+      id: json['id'] ?? '',
+      name: json['assistantName'] ?? '',
+      description: json['description'] ?? '',
+      instructions: json['instructions'] ?? '',
+      avatarUrl: json['avatarUrl'] ?? '',
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : DateTime.now(),
+      knowledgeIds: json['knowledgeIds'] != null
+          ? List<String>.from(json['knowledgeIds'])
+          : [],
+      isPublished: json['isPublished'] ?? false,
+      publishedChannels: json['publishedChannels'] != null
+          ? Map<String, String>.from(json['publishedChannels'])
+          : {},
+      openAiAssistantId: json['openAiAssistantId'],
+      openAiThreadIdPlay: json['openAiThreadIdPlay'],
+      createdBy: json['createdBy'],
+      updatedBy: json['updatedBy'],
+    );
+  }
+}

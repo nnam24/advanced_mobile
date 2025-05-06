@@ -13,7 +13,12 @@
   
   <div style="background: linear-gradient(45deg, #0072ff, #00c6ff, #0072ff); padding: 25px; border-radius: 15px; margin: 30px 0; box-shadow: 0 10px 30px rgba(0,114,255,0.3);">
     <h2 style="color: white; margin-bottom: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">📺 Watch Our Demo Video</h2>
+    <h1> Demo milestone 1: </h1>
     <a href="https://youtu.be/Up0f0xoU7Dc" target="_blank">
+      <img src="https://img.shields.io/badge/YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="YouTube Demo" width="200" style="transform: scale(1.2); transition: transform 0.3s ease;">
+    </a>
+    <h1> Demo milestone 2: </h1>
+    <a href="https://youtu.be/JFa60vW_n-s" target="_blank">
       <img src="https://img.shields.io/badge/YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="YouTube Demo" width="200" style="transform: scale(1.2); transition: transform 0.3s ease;">
     </a>
     <p style="color: white; margin-top: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.2);"><strong>👆 Click to watch our full demonstration on YouTube! 👆</strong></p>

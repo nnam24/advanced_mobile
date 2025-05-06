@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/animated_background.dart';
+import '../home_screen.dart';
 import 'login_screen.dart';
-import '../../screens/home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -33,14 +33,14 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
-    
+
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
         curve: Curves.easeOut,
       ),
     );
-    
+
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.1),
       end: Offset.zero,
@@ -50,7 +50,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
         curve: Curves.easeOut,
       ),
     );
-    
+
     _animationController.forward();
   }
 
@@ -79,22 +79,26 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
   Future<void> _register() async {
     if (_formKey.currentState!.validate() && _agreeToTerms) {
       HapticFeedback.lightImpact();
-      
+
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+      // Call the API to register the user
       final success = await authProvider.register(
         _nameController.text.trim(),
         _emailController.text.trim(),
         _passwordController.text,
       );
-      
+
       if (success && mounted) {
+        // Navigate to home screen on success
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const HomeScreen()),
         );
       } else if (mounted) {
+        // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Registration failed. Please try again.'),
+          SnackBar(
+            content: Text(authProvider.error ?? 'Registration failed. Please try again.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -112,7 +116,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
-    
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -157,9 +161,9 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                             ),
                             textAlign: TextAlign.center,
                           ),
-                          
+
                           const SizedBox(height: 32),
-                          
+
                           // Registration Form
                           Form(
                             key: _formKey,
@@ -189,9 +193,9 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     return null;
                                   },
                                 ),
-                                
+
                                 const SizedBox(height: 16),
-                                
+
                                 // Email Field
                                 TextFormField(
                                   controller: _emailController,
@@ -217,9 +221,9 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     return null;
                                   },
                                 ),
-                                
+
                                 const SizedBox(height: 16),
-                                
+
                                 // Password Field
                                 TextFormField(
                                   controller: _passwordController,
@@ -248,15 +252,15 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     if (value == null || value.isEmpty) {
                                       return 'Please enter a password';
                                     }
-                                    if (value.length < 6) {
-                                      return 'Password must be at least 6 characters';
+                                    if (value.length < 8) {
+                                      return 'Password must be at least 8 characters';
                                     }
                                     return null;
                                   },
                                 ),
-                                
+
                                 const SizedBox(height: 16),
-                                
+
                                 // Confirm Password Field
                                 TextFormField(
                                   controller: _confirmPasswordController,
@@ -291,9 +295,9 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     return null;
                                   },
                                 ),
-                                
+
                                 const SizedBox(height: 16),
-                                
+
                                 // Terms and Conditions
                                 Row(
                                   children: [
@@ -336,9 +340,9 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     ),
                                   ],
                                 ),
-                                
+
                                 const SizedBox(height: 24),
-                                
+
                                 // Register Button
                                 ElevatedButton(
                                   onPressed: authProvider.isLoading ? null : _register,
@@ -350,24 +354,24 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                   ),
                                   child: authProvider.isLoading
                                       ? const SizedBox(
-                                          height: 20,
-                                          width: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                          ),
-                                        )
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  )
                                       : const Text(
-                                          'Create Account',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
+                                    'Create Account',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
-                                
+
                                 const SizedBox(height: 24),
-                                
+
                                 // Login Link
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,

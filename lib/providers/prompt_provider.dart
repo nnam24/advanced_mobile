@@ -1,301 +1,365 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../models/prompt.dart';
+import '../models/prompt_response.dart';
+import '../services/prompt_service.dart';
 
-class PromptProvider extends ChangeNotifier {
+class PromptProvider with ChangeNotifier {
+  final PromptService _promptService;
+
   List<Prompt> _prompts = [];
   List<Prompt> _favoritePrompts = [];
+  List<Prompt> _myPrompts = [];
   bool _isLoading = false;
-  String _error = '';
+  bool _hasNext = true;
+  bool _hasMoreFavorites = true;
+  bool _hasMoreMyPrompts = true;
+  String? _error;
+  int _offset = 0;
+  int _favoriteOffset = 0;
+  int _myPromptsOffset = 0;
   PromptCategory? _selectedCategory;
-  String _searchQuery = '';
-  PromptVisibility _visibilityFilter = PromptVisibility.public;
+  String? _searchQuery;
+  bool _isPublicFilter = true;
+  // Add a flag to track if we've attempted to fetch favorites
+  bool _hasFetchedFavorites = false;
 
-  // Getters
-  List<Prompt> get prompts => _getFilteredPrompts();
+  PromptProvider({required PromptService promptService})
+      : _promptService = promptService;
+
+  List<Prompt> get prompts => _prompts;
   List<Prompt> get favoritePrompts => _favoritePrompts;
+  List<Prompt> get myPrompts => _myPrompts;
   bool get isLoading => _isLoading;
-  String get error => _error;
+  bool get hasNext => _hasNext;
+  bool get hasMoreFavorites => _hasMoreFavorites;
+  bool get hasMoreMyPrompts => _hasMoreMyPrompts;
+  String? get error => _error;
   PromptCategory? get selectedCategory => _selectedCategory;
-  String get searchQuery => _searchQuery;
-  PromptVisibility get visibilityFilter => _visibilityFilter;
+  String? get searchQuery => _searchQuery;
+  bool get isPublicFilter => _isPublicFilter;
+  // Add getter for the new flag
+  bool get hasFetchedFavorites => _hasFetchedFavorites;
 
-  PromptProvider() {
-    _initializeMockData();
+  // Helper method to check if a prompt has a valid ID
+  // Using dynamic parameter to be compatible with where() method
+  bool hasValidId(dynamic item) {
+    if (item is Prompt) {
+      return item.id.isNotEmpty;
+    }
+    return false;
   }
 
-  void _initializeMockData() {
-    final now = DateTime.now();
+  // Helper method to log prompt IDs for debugging
+  void _logPromptIds(List<Prompt> prompts, String source) {
+    if (prompts.isEmpty) {
+      print('$source: No prompts to log');
+      return;
+    }
 
-    _prompts = [
-      Prompt(
-        id: '1',
-        title: 'Explain a Complex Topic',
-        content:
-            'Explain [topic] in simple terms as if I am a [profession/age].',
-        category: PromptCategory.general,
-        visibility: PromptVisibility.public,
-        authorId: 'system',
-        authorName: 'System',
-        createdAt: now.subtract(const Duration(days: 30)),
-        updatedAt: now.subtract(const Duration(days: 30)),
-        usageCount: 1245,
-        isFavorite: true,
-      ),
-      Prompt(
-        id: '2',
-        title: 'Code Review',
-        content:
-            'Review this code and suggest improvements:\n```[language]\n[code]\n```',
-        category: PromptCategory.coding,
-        visibility: PromptVisibility.public,
-        authorId: 'system',
-        authorName: 'System',
-        createdAt: now.subtract(const Duration(days: 25)),
-        updatedAt: now.subtract(const Duration(days: 25)),
-        usageCount: 876,
-        isFavorite: false,
-      ),
-      Prompt(
-        id: '3',
-        title: 'Email Draft',
-        content:
-            'Draft a professional email to [recipient] about [topic]. The tone should be [tone].',
-        category: PromptCategory.business,
-        visibility: PromptVisibility.public,
-        authorId: 'system',
-        authorName: 'System',
-        createdAt: now.subtract(const Duration(days: 20)),
-        updatedAt: now.subtract(const Duration(days: 20)),
-        usageCount: 1032,
-        isFavorite: true,
-      ),
-      Prompt(
-        id: '4',
-        title: 'Creative Story',
-        content:
-            'Write a short story in the style of [author] about [topic/theme].',
-        category: PromptCategory.creative,
-        visibility: PromptVisibility.public,
-        authorId: 'system',
-        authorName: 'System',
-        createdAt: now.subtract(const Duration(days: 15)),
-        updatedAt: now.subtract(const Duration(days: 15)),
-        usageCount: 543,
-        isFavorite: false,
-      ),
-      Prompt(
-        id: '5',
-        title: 'Research Summary',
-        content:
-            'Summarize the key findings and implications of research on [topic].',
-        category: PromptCategory.academic,
-        visibility: PromptVisibility.public,
-        authorId: 'system',
-        authorName: 'System',
-        createdAt: now.subtract(const Duration(days: 10)),
-        updatedAt: now.subtract(const Duration(days: 10)),
-        usageCount: 321,
-        isFavorite: false,
-      ),
-      Prompt(
-        id: '6',
-        title: 'My Flutter Project Plan',
-        content:
-            'Create a detailed project plan for building a Flutter mobile app with the following features: [features].',
-        category: PromptCategory.coding,
-        visibility: PromptVisibility.private,
-        authorId: '1', // Current user ID
-        authorName: 'User',
-        createdAt: now.subtract(const Duration(days: 5)),
-        updatedAt: now.subtract(const Duration(days: 5)),
-        usageCount: 12,
-        isFavorite: true,
-      ),
-      Prompt(
-        id: '7',
-        title: 'Personal Bio',
-        content:
-            'Help me write a professional bio for my [platform] profile that highlights my experience in [field].',
-        category: PromptCategory.personal,
-        visibility: PromptVisibility.private,
-        authorId: '1', // Current user ID
-        authorName: 'User',
-        createdAt: now.subtract(const Duration(days: 3)),
-        updatedAt: now.subtract(const Duration(days: 3)),
-        usageCount: 5,
-        isFavorite: true,
-      ),
-    ];
+    final validCount = prompts.where((p) => p.id.isNotEmpty).length;
+    final invalidCount = prompts.length - validCount;
 
-    // Initialize favorites
-    _favoritePrompts = _prompts.where((prompt) => prompt.isFavorite).toList();
+    print(
+        '$source: ${prompts.length} prompts (Valid: $validCount, Invalid: $invalidCount)');
+
+    if (invalidCount > 0) {
+      print('$source: Found $invalidCount prompts with empty IDs');
+    }
+
+    // Log the first few prompts for debugging
+    for (var i = 0; i < prompts.length && i < 3; i++) {
+      print(
+          '$source: Prompt $i - ID: ${prompts[i].id}, Title: ${prompts[i].title}');
+    }
   }
 
-  List<Prompt> _getFilteredPrompts() {
-    return _prompts.where((prompt) {
-      // Filter by visibility
-      if (prompt.visibility != _visibilityFilter) {
-        return false;
-      }
+  // Set the visibility filter (public/private)
+  Future<void> setVisibilityFilter(bool isPublic) async {
+    print(
+        'Setting visibility filter to isPublic=$isPublic (current: $_isPublicFilter)');
 
-      // Filter by category if selected
-      if (_selectedCategory != null && prompt.category != _selectedCategory) {
-        return false;
-      }
+    if (_isPublicFilter == isPublic) {
+      print('Filter already set to $isPublic, skipping');
+      return;
+    }
 
-      // Filter by search query
-      if (_searchQuery.isNotEmpty) {
-        final query = _searchQuery.toLowerCase();
-        return prompt.title.toLowerCase().contains(query) ||
-            prompt.content.toLowerCase().contains(query);
-      }
+    _isPublicFilter = isPublic;
+    _offset = 0;
+    _hasNext = true;
+    _prompts = []; // Clear the current prompts list
+    notifyListeners();
 
-      return true;
-    }).toList();
+    print('Filter updated, fetching prompts with isPublic=$isPublic');
+    await fetchPrompts(isPublic: isPublic, refresh: true);
   }
 
+  // Set the category filter
   void setCategory(PromptCategory? category) {
     _selectedCategory = category;
-    notifyListeners();
+    refreshPrompts();
   }
 
+  // Modify the setSearchQuery method to use the correct parameter name
   void setSearchQuery(String query) {
-    _searchQuery = query;
-    notifyListeners();
+    _searchQuery = query.isEmpty ? null : query;
+    refreshPrompts();
   }
 
-  void setVisibilityFilter(PromptVisibility visibility) {
-    _visibilityFilter = visibility;
-    notifyListeners();
+  // Refresh prompts with current filters
+  Future<void> refreshPrompts() async {
+    _offset = 0;
+    _hasNext = true;
+    await fetchPrompts(isPublic: _isPublicFilter);
   }
 
-  Future<bool> toggleFavorite(String promptId) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      // Simulate API call
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      // Update prompt
-      final index = _prompts.indexWhere((p) => p.id == promptId);
-      if (index != -1) {
-        final prompt = _prompts[index];
-        final updatedPrompt = prompt.copyWith(
-          isFavorite: !prompt.isFavorite,
-        );
-
-        _prompts[index] = updatedPrompt;
-
-        // Update favorites list
-        if (updatedPrompt.isFavorite) {
-          _favoritePrompts.add(updatedPrompt);
-        } else {
-          _favoritePrompts.removeWhere((p) => p.id == promptId);
-        }
-      }
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return false;
+  // Update the fetchPrompts method to use 'query' parameter instead of 'search'
+  Future<void> fetchPrompts({
+    bool? isPublic,
+    String? category,
+    String? search,
+    bool refresh = false,
+  }) async {
+    if (_isLoading) {
+      print('Already loading prompts, skipping new request');
+      return;
     }
-  }
 
-  Future<bool> createPrompt(Prompt prompt) async {
-    try {
-      _isLoading = true;
+    if (refresh) {
+      print('Refreshing prompts list');
+      _offset = 0;
+      _hasNext = true;
+      _prompts = []; // Clear the current prompts list when refreshing
       notifyListeners();
+    }
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 1));
+    if (!_hasNext && !refresh) {
+      print('No more prompts to load and not refreshing, skipping');
+      return;
+    }
 
-      // Create new prompt
-      final newPrompt = prompt.copyWith(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
+    // Update filters if provided
+    if (isPublic != null) {
+      _isPublicFilter = isPublic;
+    }
+
+    print(
+        'Fetching prompts with isPublic: ${isPublic != null ? isPublic : "not specified (all)"}, offset: $_offset');
+
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final categoryValue = _selectedCategory?.toString().split('.').last;
+
+      print(
+          'API request: isPublic=${isPublic != null ? isPublic : "not specified"}, category=$categoryValue, query=$_searchQuery, offset=$_offset');
+
+      final response = await _promptService.getPrompts(
+        offset: _offset,
+        category: categoryValue,
+        query: _searchQuery, // Use query parameter instead of search
+        isPublic:
+            isPublic, // Pass the isPublic parameter as is, which might be null
       );
 
-      _prompts.add(newPrompt);
+      // Filter out prompts with empty IDs
+      final validPrompts =
+          response.items.where((p) => p.id.isNotEmpty).toList();
 
-      // Add to favorites if marked as favorite
-      if (newPrompt.isFavorite) {
-        _favoritePrompts.add(newPrompt);
+      // Log the prompts for debugging
+      _logPromptIds(validPrompts, 'fetchPrompts');
+
+      if (refresh || _offset == 0) {
+        _prompts = validPrompts;
+      } else {
+        _prompts = [..._prompts, ...validPrompts];
       }
 
+      _offset = _prompts.length;
+      _hasNext = response.hasNext;
+      _isLoading = false;
+
+      print(
+          'Fetch complete: ${validPrompts.length} prompts loaded, hasNext: $_hasNext');
+
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching prompts: $e');
+      _error = e.toString();
       _isLoading = false;
       notifyListeners();
-      return true;
+    }
+  }
+
+  Future<void> loadMore() async {
+    if (!_hasNext || _isLoading) return;
+    await fetchPrompts(isPublic: _isPublicFilter);
+  }
+
+// Modify the fetchFavorites method to better handle empty results
+  Future<void> fetchFavorites({bool refresh = false}) async {
+    if (_isLoading) {
+      print('Already loading favorites, skipping new request');
+      return;
+    }
+
+    if (refresh) {
+      print('Refreshing favorites list');
+      _favoriteOffset = 0;
+      _hasMoreFavorites = true;
+      _favoritePrompts = []; // Clear when refreshing
+      notifyListeners();
+    }
+
+    if (!_hasMoreFavorites && !refresh) {
+      print('No more favorites to load and not refreshing, skipping');
+      return;
+    }
+
+    print('Fetching favorites with offset: $_favoriteOffset');
+
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final response = await _promptService.getFavoritePrompts(
+        offset: _favoriteOffset,
+      );
+
+      // Filter out prompts with empty IDs
+      final validPrompts =
+          response.items.where((p) => p.id.isNotEmpty).toList();
+
+      // Log the prompts for debugging
+      _logPromptIds(validPrompts, 'fetchFavorites');
+
+      if (refresh) {
+        _favoritePrompts = validPrompts;
+      } else {
+        _favoritePrompts = [..._favoritePrompts, ...validPrompts];
+      }
+
+      _favoriteOffset = _favoritePrompts.length;
+      _hasMoreFavorites = response.hasNext;
+      _isLoading = false;
+      _hasFetchedFavorites = true; // Mark that we've fetched favorites
+
+      print(
+          'Favorites fetch complete: ${validPrompts.length} prompts loaded, hasMore: $_hasMoreFavorites');
+
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching favorites: $e');
+      _error = e.toString();
+      _isLoading = false;
+      _hasFetchedFavorites =
+          true; // Mark that we've attempted to fetch favorites
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchMyPrompts({bool refresh = false}) async {
+    if (_isLoading) return;
+
+    if (refresh) {
+      _myPromptsOffset = 0;
+      _hasMoreMyPrompts = true;
+    }
+
+    if (!_hasMoreMyPrompts && !refresh) return;
+
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final response = await _promptService.getPrompts(
+        offset: _myPromptsOffset,
+        isPublic: false,
+      );
+
+      // Filter out prompts with empty IDs
+      final validPrompts =
+          response.items.where((p) => p.id.isNotEmpty).toList();
+
+      // Log the prompts for debugging
+      _logPromptIds(response.items, 'fetchMyPrompts');
+
+      if (refresh) {
+        _myPrompts = validPrompts;
+      } else {
+        _myPrompts = [..._myPrompts, ...validPrompts];
+      }
+
+      _myPromptsOffset = _myPrompts.length;
+      _hasMoreMyPrompts = response.hasNext;
+      _isLoading = false;
+      notifyListeners();
     } catch (e) {
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
-      return false;
     }
   }
 
-  Future<bool> updatePrompt(Prompt prompt) async {
+  // Updated toggleFavorite method to use the new API endpoints
+  Future<bool> toggleFavorite(String promptId) async {
+    // Validate the ID
+    if (promptId.isEmpty) {
+      _error = 'Cannot toggle favorite: Empty ID provided';
+      notifyListeners();
+      return false;
+    }
+
     try {
+      // Find the prompt in our lists to check its current favorite status
+      Prompt? prompt = getPromptById(promptId);
+      bool isFavorite = prompt?.isFavorite ?? false;
+      bool success;
+
+      // Show loading state
       _isLoading = true;
       notifyListeners();
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 1));
+      // Call the appropriate API method based on current favorite status
+      if (isFavorite) {
+        // If it's already a favorite, remove it
+        success = await _promptService.removeFromFavorites(promptId);
+      } else {
+        // If it's not a favorite, add it
+        success = await _promptService.addToFavorites(promptId);
+      }
 
-      // Update prompt
-      final index = _prompts.indexWhere((p) => p.id == prompt.id);
-      if (index != -1) {
-        final updatedPrompt = prompt.copyWith(
-          updatedAt: DateTime.now(),
+      if (success) {
+        // Update the prompt in all lists
+        _updatePromptInLists(
+          promptId,
+          (prompt) => prompt.copyWith(isFavorite: !isFavorite),
         );
 
-        _prompts[index] = updatedPrompt;
-
-        // Update in favorites if needed
-        final favoriteIndex =
-            _favoritePrompts.indexWhere((p) => p.id == prompt.id);
-        if (favoriteIndex != -1) {
-          if (updatedPrompt.isFavorite) {
-            _favoritePrompts[favoriteIndex] = updatedPrompt;
-          } else {
-            _favoritePrompts.removeAt(favoriteIndex);
+        // If we're removing from favorites, also remove from the favorites list
+        if (isFavorite) {
+          _favoritePrompts.removeWhere((p) => p.id == promptId);
+        } else {
+          // If we're adding to favorites and we have the prompt in another list,
+          // add it to the favorites list too
+          if (prompt != null &&
+              !_favoritePrompts.any((p) => p.id == promptId)) {
+            _favoritePrompts.add(prompt.copyWith(isFavorite: true));
           }
-        } else if (updatedPrompt.isFavorite) {
-          _favoritePrompts.add(updatedPrompt);
         }
+
+        _isLoading = false;
+        notifyListeners();
+      } else {
+        _error = 'Failed to toggle favorite status';
+        _isLoading = false;
+        notifyListeners();
       }
 
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  Future<bool> deletePrompt(String promptId) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 1));
-
-      // Delete prompt
-      _prompts.removeWhere((p) => p.id == promptId);
-      _favoritePrompts.removeWhere((p) => p.id == promptId);
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
+      return success;
     } catch (e) {
       _error = e.toString();
       _isLoading = false;
@@ -305,45 +369,200 @@ class PromptProvider extends ChangeNotifier {
   }
 
   Future<bool> incrementUsageCount(String promptId) async {
+    // Validate the ID
+    if (promptId.isEmpty) {
+      _error = 'Cannot increment usage count: Empty ID provided';
+      notifyListeners();
+      return false;
+    }
+
     try {
-      // Find prompt
-      final index = _prompts.indexWhere((p) => p.id == promptId);
-      if (index != -1) {
-        final prompt = _prompts[index];
-        final updatedPrompt = prompt.copyWith(
-          usageCount: prompt.usageCount + 1,
+      final success = await _promptService.incrementUsageCount(promptId);
+
+      if (success) {
+        // Update the prompt in all lists
+        _updatePromptInLists(
+          promptId,
+          (prompt) => prompt.copyWith(usageCount: prompt.usageCount + 1),
         );
-
-        _prompts[index] = updatedPrompt;
-
-        // Update in favorites if needed
-        final favoriteIndex =
-            _favoritePrompts.indexWhere((p) => p.id == promptId);
-        if (favoriteIndex != -1) {
-          _favoritePrompts[favoriteIndex] = updatedPrompt;
-        }
-
         notifyListeners();
       }
 
-      return true;
+      return success;
     } catch (e) {
+      _error = e.toString();
+      notifyListeners();
       return false;
     }
   }
 
-  // Get prompt by ID
-  Prompt? getPromptById(String id) {
-    try {
-      return _prompts.firstWhere((p) => p.id == id);
-    } catch (e) {
-      return null;
+  void _updatePromptInLists(String promptId, Prompt Function(Prompt) update) {
+    // Validate the ID
+    if (promptId.isEmpty) {
+      print('Cannot update prompt in lists: Empty ID provided');
+      return;
+    }
+
+    // Update in prompts list
+    for (var i = 0; i < _prompts.length; i++) {
+      if (_prompts[i].id == promptId) {
+        _prompts[i] = update(_prompts[i]);
+      }
+    }
+
+    // Update in favorite prompts list
+    for (var i = 0; i < _favoritePrompts.length; i++) {
+      if (_favoritePrompts[i].id == promptId) {
+        _favoritePrompts[i] = update(_favoritePrompts[i]);
+      }
+    }
+
+    // Update in my prompts list
+    for (var i = 0; i < _myPrompts.length; i++) {
+      if (_myPrompts[i].id == promptId) {
+        _myPrompts[i] = update(_myPrompts[i]);
+      }
     }
   }
 
-  // Clear error
-  void clearError() {
-    _error = '';
+  Prompt? getPromptById(String id) {
+    // Validate the ID
+    if (id.isEmpty) {
+      print('Cannot get prompt by ID: Empty ID provided');
+      return null;
+    }
+
+    // Check in prompts list
+    for (var prompt in _prompts) {
+      if (prompt.id == id) {
+        return prompt;
+      }
+    }
+
+    // Check in favorite prompts list
+    for (var prompt in _favoritePrompts) {
+      if (prompt.id == id) {
+        return prompt;
+      }
+    }
+
+    // Check in my prompts list
+    for (var prompt in _myPrompts) {
+      if (prompt.id == id) {
+        return prompt;
+      }
+    }
+
+    return null;
+  }
+
+  Future<bool> createPrompt(Prompt prompt) async {
+    _isLoading = true;
+    _error = null;
     notifyListeners();
+
+    try {
+      final createdPrompt = await _promptService.createPrompt(prompt);
+
+      // Verify that the created prompt has a valid ID
+      if (createdPrompt.id.isEmpty) {
+        _error = 'Created prompt has no valid ID';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      // Add to my prompts list if it's private
+      if (!createdPrompt.isPublic) {
+        _myPrompts = [createdPrompt, ..._myPrompts];
+      } else {
+        // Add to public prompts list if it's public
+        _prompts = [createdPrompt, ..._prompts];
+      }
+
+      _isLoading = false;
+      notifyListeners();
+
+      print('Successfully created prompt: ${createdPrompt.id}');
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> updatePrompt(Prompt updatedPrompt) async {
+    // Validate the ID
+    if (updatedPrompt.id.isEmpty) {
+      _error = 'Cannot update prompt: Empty ID provided';
+      notifyListeners();
+      return false;
+    }
+
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final prompt = await _promptService.updatePrompt(updatedPrompt);
+
+      // Update the prompt in all lists
+      _updatePromptInLists(
+        updatedPrompt.id,
+        (_) => prompt,
+      );
+
+      _isLoading = false;
+      notifyListeners();
+
+      print('Successfully updated prompt: ${updatedPrompt.id}');
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> deletePrompt(String id) async {
+    // Validate the ID
+    if (id.isEmpty) {
+      _error = 'Cannot delete prompt: Empty ID provided';
+      notifyListeners();
+      return false;
+    }
+
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final success = await _promptService.deletePrompt(id);
+
+      if (success) {
+        // Remove the prompt from all lists
+        _prompts.removeWhere((prompt) => prompt.id == id);
+        _favoritePrompts.removeWhere((prompt) => prompt.id == id);
+        _myPrompts.removeWhere((prompt) => prompt.id == id);
+
+        print('Successfully deleted prompt: $id');
+      } else {
+        _error = 'Failed to delete prompt';
+        print('Failed to delete prompt: $id');
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return success;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      print('Error deleting prompt: $e');
+      return false;
+    }
   }
 }

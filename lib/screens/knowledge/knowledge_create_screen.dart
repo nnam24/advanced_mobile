@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/ai_bot_service.dart';
+import '../../services/knowledge_service.dart';
 import '../../models/knowledge_item.dart';
 import '../../widgets/animated_background.dart';
 
@@ -15,17 +16,14 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
-  final _urlController = TextEditingController();
-  String _selectedSource =
-      'text'; // 'text', 'file', 'url', 'drive', 'slack', 'confluence'
-  String _selectedFileType = 'txt'; // 'txt', 'pdf', 'doc', 'docx'
   bool _isLoading = false;
+  final _knowledgeService = KnowledgeService();
+  String? _errorMessage;
 
   @override
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
-    _urlController.dispose();
     super.dispose();
   }
 
@@ -33,29 +31,19 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
+        _errorMessage = null;
       });
 
       try {
-        // In a real app, this would call an API to create the knowledge item
-        // For now, we'll just simulate it with a delay
-        await Future.delayed(const Duration(seconds: 1));
-
-        final newKnowledge = KnowledgeItem(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          title: _titleController.text.trim(),
-          content: _selectedSource == 'text'
-              ? _contentController.text.trim()
-              : 'Content from ${_selectedSource}: ${_urlController.text}',
-          fileUrl: _selectedSource == 'text' ? '' : _urlController.text.trim(),
-          fileType: _selectedSource == 'text' ? 'text' : _selectedFileType,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
+        // Call the actual API to create the knowledge item
+        final newKnowledge = await _knowledgeService.createKnowledge(
+          knowledgeName: _titleController.text.trim(),
+          description: _contentController.text.trim(),
         );
 
-        // Add to the service
-        // Note: In a real app, this would be handled by a dedicated knowledge service
+        // Add to the service for local state management
         final aiBotService = Provider.of<AIBotService>(context, listen: false);
-        aiBotService.addKnowledgeItem(newKnowledge);
+        // aiBotService.addKnowledgeItem(newKnowledge);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -64,14 +52,21 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
               behavior: SnackBarBehavior.floating,
             ),
           );
-          Navigator.pop(context);
+          // Return true to indicate successful creation
+          Navigator.pop(context, true);
         }
       } catch (e) {
+        setState(() {
+          _errorMessage = e.toString();
+        });
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to create knowledge source: $e'),
+              content:
+                  Text('Failed to create knowledge source: ${e.toString()}'),
               behavior: SnackBarBehavior.floating,
+              backgroundColor: Colors.red,
             ),
           );
         }
@@ -116,6 +111,31 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Error message if any
+                  if (_errorMessage != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.withOpacity(0.5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   // Title field
                   TextFormField(
                     controller: _titleController,
@@ -134,9 +154,9 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Source type selector
+                  // Description field
                   Text(
-                    'Source Type',
+                    'Description',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -144,147 +164,33 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-
-                  // Source type options
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      _buildSourceChip('text', 'Text', Icons.text_fields),
-                      _buildSourceChip(
-                          'file', 'File Upload', Icons.upload_file),
-                      _buildSourceChip('url', 'Website URL', Icons.link),
-                      _buildSourceChip('drive', 'Google Drive', Icons.cloud),
-                      _buildSourceChip('slack', 'Slack', Icons.chat),
-                      _buildSourceChip(
-                          'confluence', 'Confluence', Icons.article),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Content fields based on selected source
-                  if (_selectedSource == 'text') ...[
-                    Text(
-                      'Content',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline
+                            .withOpacity(0.5),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .outline
-                              .withOpacity(0.5),
-                        ),
+                    child: TextFormField(
+                      controller: _contentController,
+                      decoration: const InputDecoration(
+                        hintText: 'Enter a description...',
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.all(16),
                       ),
-                      child: TextFormField(
-                        controller: _contentController,
-                        decoration: const InputDecoration(
-                          hintText: 'Enter the content...',
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.all(16),
-                        ),
-                        maxLines: 10,
-                        validator: (value) {
-                          if (_selectedSource == 'text' &&
-                              (value == null || value.isEmpty)) {
-                            return 'Please enter some content';
-                          }
-                          return null;
-                        },
-                      ),
-                    ),
-                  ] else ...[
-                    // File type selector (for file uploads)
-                    if (_selectedSource == 'file') ...[
-                      Text(
-                        'File Type',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          _buildFileTypeChip('txt', 'TXT'),
-                          _buildFileTypeChip('pdf', 'PDF'),
-                          _buildFileTypeChip('doc', 'DOC'),
-                          _buildFileTypeChip('docx', 'DOCX'),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // URL or file path field
-                    TextFormField(
-                      controller: _urlController,
-                      decoration: InputDecoration(
-                        labelText: _getUrlFieldLabel(),
-                        hintText: _getUrlFieldHint(),
-                        prefixIcon: Icon(_getUrlFieldIcon()),
-                      ),
+                      maxLines: 10,
                       validator: (value) {
-                        if (_selectedSource != 'text' &&
-                            (value == null || value.isEmpty)) {
-                          return 'Please enter a ${_selectedSource == 'url' ? 'URL' : 'source'}';
-                        }
-                        if (_selectedSource == 'url' &&
-                            value != null &&
-                            !value.startsWith('http')) {
-                          return 'Please enter a valid URL starting with http:// or https://';
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter a description';
                         }
                         return null;
                       },
                     ),
-
-                    const SizedBox(height: 16),
-
-                    // Upload button for file
-                    if (_selectedSource == 'file')
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          // File picker would be implemented here
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                  'File picker not implemented in this demo'),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.upload_file),
-                        label: const Text('Choose File'),
-                      ),
-
-                    // Connect button for external services
-                    if (['drive', 'slack', 'confluence']
-                        .contains(_selectedSource))
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          // OAuth flow would be implemented here
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                  '${_selectedSource.toUpperCase()} integration not implemented in this demo'),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        },
-                        icon: Icon(_getConnectButtonIcon()),
-                        label:
-                            Text('Connect to ${_selectedSource.toUpperCase()}'),
-                      ),
-                  ],
+                  ),
 
                   const SizedBox(height: 32),
 
@@ -322,122 +228,5 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
         ],
       ),
     );
-  }
-
-  Widget _buildSourceChip(String value, String label, IconData icon) {
-    final isSelected = _selectedSource == value;
-
-    return FilterChip(
-      selected: isSelected,
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 16,
-            color: isSelected
-                ? Theme.of(context).colorScheme.onPrimary
-                : Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(width: 4),
-          Text(label),
-        ],
-      ),
-      onSelected: (selected) {
-        setState(() {
-          _selectedSource = value;
-        });
-      },
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      selectedColor: Theme.of(context).colorScheme.primary,
-      checkmarkColor: Theme.of(context).colorScheme.onPrimary,
-    );
-  }
-
-  Widget _buildFileTypeChip(String value, String label) {
-    final isSelected = _selectedFileType == value;
-
-    return ChoiceChip(
-      selected: isSelected,
-      label: Text(label),
-      onSelected: (selected) {
-        if (selected) {
-          setState(() {
-            _selectedFileType = value;
-          });
-        }
-      },
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      selectedColor: Theme.of(context).colorScheme.primary,
-      labelStyle: TextStyle(
-        color: isSelected
-            ? Theme.of(context).colorScheme.onPrimary
-            : Theme.of(context).colorScheme.onSurface,
-      ),
-    );
-  }
-
-  String _getUrlFieldLabel() {
-    switch (_selectedSource) {
-      case 'file':
-        return 'File Path';
-      case 'url':
-        return 'Website URL';
-      case 'drive':
-        return 'Google Drive URL';
-      case 'slack':
-        return 'Slack Channel/Message URL';
-      case 'confluence':
-        return 'Confluence Page URL';
-      default:
-        return 'Source';
-    }
-  }
-
-  String _getUrlFieldHint() {
-    switch (_selectedSource) {
-      case 'file':
-        return 'Select a file to upload';
-      case 'url':
-        return 'Enter the website URL';
-      case 'drive':
-        return 'Enter Google Drive document URL';
-      case 'slack':
-        return 'Enter Slack channel or message URL';
-      case 'confluence':
-        return 'Enter Confluence page URL';
-      default:
-        return 'Enter source location';
-    }
-  }
-
-  IconData _getUrlFieldIcon() {
-    switch (_selectedSource) {
-      case 'file':
-        return Icons.upload_file;
-      case 'url':
-        return Icons.link;
-      case 'drive':
-        return Icons.cloud;
-      case 'slack':
-        return Icons.chat;
-      case 'confluence':
-        return Icons.article;
-      default:
-        return Icons.link;
-    }
-  }
-
-  IconData _getConnectButtonIcon() {
-    switch (_selectedSource) {
-      case 'drive':
-        return Icons.cloud;
-      case 'slack':
-        return Icons.chat;
-      case 'confluence':
-        return Icons.article;
-      default:
-        return Icons.link;
-    }
   }
 }

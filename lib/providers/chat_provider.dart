@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/conversation.dart';
 import '../models/message.dart';
+import '../models/chat_history.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 
@@ -11,6 +15,19 @@ class ChatProvider extends ChangeNotifier {
   Conversation? _currentConversation;
   String _selectedAgent = 'Claude 3.5 Sonnet';
   bool _isLoading = false;
+  bool _isFetchingConversations = false;
+  String? _nextCursor;
+  bool _hasMoreConversations = false;
+
+  // For conversation history pagination
+  Map<String, String?> _conversationCursors = {};
+  Map<String, bool> _hasMoreMessages = {};
+  Map<String, bool> _isFetchingMessages = {};
+
+  // API configuration
+  final String _baseUrl = 'https://api.dev.jarvis.cx';
+  final String _apiPath = '/api/v1/ai-chat/messages';
+  final String _conversationsPath = '/api/v1/ai-chat/conversations';
 
   // Token management
   final int _maxTokenLimit = 1000; // Maximum token limit
@@ -23,11 +40,19 @@ class ChatProvider extends ChangeNotifier {
   Conversation? get currentConversation => _currentConversation;
   String get selectedAgent => _selectedAgent;
   bool get isLoading => _isLoading;
+  bool get isFetchingConversations => _isFetchingConversations;
+  bool get hasMoreConversations => _hasMoreConversations;
   int get tokenLimit => _maxTokenLimit;
   int get availableTokens => _availableTokens;
   int get totalTokensUsed => _totalTokensUsed;
   double get tokenAvailabilityPercentage => _availableTokens / _maxTokenLimit;
   bool get hasTokens => _availableTokens > 0;
+
+  bool isLoadingMessages(String conversationId) =>
+      _isFetchingMessages[conversationId] ?? false;
+
+  bool hasMoreMessages(String conversationId) =>
+      _hasMoreMessages[conversationId] ?? false;
 
   final List<String> _availableAgents = [
     'Claude 3.5 Sonnet',
@@ -36,11 +61,27 @@ class ChatProvider extends ChangeNotifier {
     'Gemini Pro',
   ];
 
+  // Map UI-friendly model names to API model IDs
+  String _getModelId(String modelName) {
+    switch (modelName) {
+      case 'Claude 3.5 Sonnet':
+        return 'claude-3-5-sonnet-20240620';
+      case 'Claude 3 Opus':
+        return 'claude-3-haiku-20240307';
+      case 'GPT-4o':
+        return 'gpt-4o';
+      case 'Gemini Pro':
+        return 'gemini-1.5-flash-latest';
+      default:
+        return 'gemini-1.5-flash-latest'; // Default model
+    }
+  }
+
   List<String> get availableAgents => _availableAgents;
 
   ChatProvider() {
     _initializeData();
-    _startTokenDecayTimer();
+    //_startTokenDecayTimer();
   }
 
   @override
@@ -49,8 +90,19 @@ class ChatProvider extends ChangeNotifier {
     super.dispose();
   }
 
-  void _initializeData() {
-    // Create some sample conversations
+  Future<void> _initializeData() async {
+    // Try to fetch conversations from API first
+    try {
+      await fetchConversations();
+    } catch (e) {
+      print('Error fetching conversations: $e');
+      // If API fetch fails, use sample data
+      _loadSampleConversations();
+    }
+  }
+
+  // Load sample conversations as fallback
+  void _loadSampleConversations() {
     final now = DateTime.now();
 
     final conversation1 = Conversation(
@@ -148,6 +200,280 @@ class ChatProvider extends ChangeNotifier {
     });
   }
 
+  // Fetch conversations from API
+  Future<void> fetchConversations(
+      {String? cursor, int limit = 20, String? assistantId}) async {
+    if (_isFetchingConversations) return;
+
+    _isFetchingConversations = true;
+    if (cursor == null) {
+      // If no cursor is provided, we're fetching the first page
+      _isLoading = true;
+    }
+    notifyListeners();
+
+    try {
+      // Get authentication token
+      final authToken = await _getAuthToken();
+      if (authToken == null) {
+        throw Exception('Authentication token not found');
+      }
+
+      // Build query parameters
+      final queryParams = <String, String>{
+        'limit': limit.toString(),
+      };
+
+      if (cursor != null) {
+        queryParams['cursor'] = cursor;
+      }
+
+      if (assistantId != null) {
+        queryParams['assistantId'] = assistantId;
+      }
+
+      // Always set assistantModel to 'dify'
+      queryParams['assistantModel'] = 'dify';
+
+      // Build URL with query parameters
+      final uri = Uri.parse('$_baseUrl$_conversationsPath').replace(
+        queryParameters: queryParams,
+      );
+
+      // Make API request
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+      );
+
+      // Log the response for debugging
+      print('API response status: ${response.statusCode}');
+      print('API response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        // Parse response
+        final responseData = jsonDecode(response.body);
+
+        // Extract cursor and has_more
+        _nextCursor = responseData['cursor'] as String?;
+        _hasMoreConversations = responseData['has_more'] as bool? ?? false;
+
+        // Extract conversations
+        final items = responseData['items'] as List<dynamic>;
+
+        // Convert API response to Conversation objects
+        final fetchedConversations = items.map((item) {
+          return Conversation(
+            id: item['id'] as String,
+            title: item['title'] as String? ?? 'Untitled Conversation',
+            agentName:
+                'AI Assistant', // Default value since API doesn't provide this
+            messages: [], // Empty messages since we don't have them yet
+            createdAt: DateTime.parse(item['createdAt'] as String),
+            updatedAt: DateTime.parse(item['createdAt'] as String),
+          );
+        }).toList();
+
+        if (cursor == null) {
+          // First page, replace existing conversations
+          _conversations = fetchedConversations;
+        } else {
+          // Subsequent page, append to existing conversations
+          _conversations.addAll(fetchedConversations);
+        }
+
+        // If we have conversations and no current conversation is selected, select the first one
+        if (_conversations.isNotEmpty && _currentConversation == null) {
+          _currentConversation = _conversations.first;
+        }
+      } else {
+        // Handle error response
+        throw Exception(
+            'Failed to fetch conversations: ${response.statusCode} ${response.body}');
+      }
+    } catch (e) {
+      print('Error fetching conversations: $e');
+      // If this is the first fetch and it failed, load sample data
+      if (cursor == null && _conversations.isEmpty) {
+        _loadSampleConversations();
+      }
+    } finally {
+      _isFetchingConversations = false;
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Load more conversations (pagination)
+  Future<void> loadMoreConversations() async {
+    if (_hasMoreConversations && _nextCursor != null) {
+      await fetchConversations(cursor: _nextCursor);
+    }
+  }
+
+  // Fetch conversation details (messages)
+  Future<void> fetchConversationDetails(String conversationId,
+      {String? cursor, int limit = 20}) async {
+    // Find the conversation in our list
+    final index = _conversations.indexWhere((c) => c.id == conversationId);
+    if (index == -1) return;
+
+    // If we're already fetching messages for this conversation, don't start another fetch
+    if (_isFetchingMessages[conversationId] == true) return;
+
+    // Set loading state
+    _isFetchingMessages[conversationId] = true;
+    if (cursor == null) {
+      // If this is the first fetch for this conversation, set loading state
+      _isLoading = true;
+    }
+    notifyListeners();
+
+    try {
+      // Get authentication token
+      final authToken = await _getAuthToken();
+      if (authToken == null) {
+        throw Exception('Authentication token not found');
+      }
+
+      // Build query parameters
+      final queryParams = <String, String>{
+        'limit': limit.toString(),
+        'assistantModel': 'dify',
+      };
+
+      if (cursor != null) {
+        queryParams['cursor'] = cursor;
+      }
+
+      // Build URL with query parameters
+      final uri =
+          Uri.parse('$_baseUrl$_conversationsPath/$conversationId/messages')
+              .replace(
+        queryParameters: queryParams,
+      );
+
+      // Make API request
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+      );
+
+      // Log the response for debugging
+      print('API response status: ${response.statusCode}');
+      print('API response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        // Parse response
+        final responseData = jsonDecode(response.body);
+
+        // Extract cursor and has_more for this conversation
+        _conversationCursors[conversationId] =
+            responseData['cursor'] as String?;
+        _hasMoreMessages[conversationId] =
+            responseData['has_more'] as bool? ?? false;
+
+        // Extract messages
+        final items = responseData['items'] as List<dynamic>;
+
+        // Convert API response to Message objects
+        List<Message> fetchedMessages = [];
+
+        for (final item in items) {
+          // Parse createdAt timestamp
+          DateTime timestamp;
+          if (item['createdAt'] is int) {
+            // If it's an integer timestamp
+            timestamp = DateTime.fromMillisecondsSinceEpoch(
+                (item['createdAt'] as int) * 1000);
+          } else {
+            // If it's a string timestamp
+            timestamp = DateTime.parse(item['createdAt'] as String);
+          }
+
+          // Generate a unique ID for each message
+          final baseId = item['id'] as String? ??
+              DateTime.now().millisecondsSinceEpoch.toString();
+
+          // Add user message if query exists
+          if (item['query'] != null && (item['query'] as String).isNotEmpty) {
+            fetchedMessages.add(Message(
+              id: '${baseId}_user',
+              content: item['query'] as String,
+              type: MessageType.user,
+              timestamp: timestamp,
+              tokenCount: 0, // We don't have this information from the API
+            ));
+          }
+
+          // Add assistant message if answer exists
+          if (item['answer'] != null && (item['answer'] as String).isNotEmpty) {
+            fetchedMessages.add(Message(
+              id: '${baseId}_assistant',
+              content: item['answer'] as String,
+              type: MessageType.assistant,
+              timestamp: timestamp.add(const Duration(
+                  milliseconds: 500)), // Slightly later than user message
+              tokenCount: 0, // We don't have this information from the API
+            ));
+          }
+        }
+
+        // Sort messages by timestamp (oldest first)
+        fetchedMessages.sort((a, b) => a.timestamp!.compareTo(b.timestamp!));
+
+        // If this is the first fetch, replace existing messages
+        // Otherwise, append to existing messages
+        if (cursor == null) {
+          _conversations[index] = _conversations[index].copyWith(
+            messages: fetchedMessages,
+          );
+        } else {
+          final updatedMessages = [
+            ...fetchedMessages,
+            ..._conversations[index].messages,
+          ];
+
+          _conversations[index] = _conversations[index].copyWith(
+            messages: updatedMessages,
+          );
+        }
+
+        // If this is the current conversation, update it too
+        if (_currentConversation?.id == conversationId) {
+          _currentConversation = _conversations[index];
+        }
+      } else {
+        // Handle error response
+        throw Exception(
+            'Failed to fetch conversation details: ${response.statusCode} ${response.body}');
+      }
+    } catch (e) {
+      print('Error fetching conversation details: $e');
+    } finally {
+      _isFetchingMessages[conversationId] = false;
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Load more messages for a conversation (pagination)
+  Future<void> loadMoreMessages(String conversationId) async {
+    if (_hasMoreMessages[conversationId] == true &&
+        _conversationCursors[conversationId] != null) {
+      await fetchConversationDetails(
+        conversationId,
+        cursor: _conversationCursors[conversationId],
+      );
+    }
+  }
+
   void createNewConversation() {
     final newConversation = Conversation.empty();
     _conversations.insert(0, newConversation);
@@ -160,6 +486,12 @@ class ChatProvider extends ChangeNotifier {
       (conversation) => conversation.id == conversationId,
     );
     _currentConversation = selectedConversation;
+
+    // If the conversation doesn't have messages yet, fetch them
+    if (selectedConversation.messages.isEmpty) {
+      fetchConversationDetails(conversationId);
+    }
+
     notifyListeners();
   }
 
@@ -179,17 +511,19 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  // Optimize the sendMessage method to prevent UI blocking
+  // Get authentication token from SharedPreferences
+  Future<String?> _getAuthToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('access_token');
+  }
+
+  // Send message to the API
   Future<void> sendMessage(String content) async {
     if (content.trim().isEmpty) return;
 
     // Check if we have enough tokens
     final estimatedUserTokens = _estimateTokenCount(content);
-    final estimatedResponseTokens =
-        estimatedUserTokens * 2; // Rough estimate for response
-    final totalEstimatedTokens = estimatedUserTokens + estimatedResponseTokens;
-
-    if (totalEstimatedTokens > _availableTokens) {
+    if (estimatedUserTokens > _availableTokens) {
       // Not enough tokens
       notifyListeners();
       return;
@@ -199,6 +533,7 @@ class ChatProvider extends ChangeNotifier {
       createNewConversation();
     }
 
+    // Create user message
     final userMessage = Message(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       content: content,
@@ -207,6 +542,7 @@ class ChatProvider extends ChangeNotifier {
       tokenCount: estimatedUserTokens,
     );
 
+    // Add user message to conversation
     final updatedMessages = [
       ..._currentConversation!.messages,
       userMessage,
@@ -231,82 +567,171 @@ class ChatProvider extends ChangeNotifier {
 
     notifyListeners();
 
-    // Simulate AI response in a separate isolate or at least a microtask
+    // Set loading state
     _isLoading = true;
     notifyListeners();
 
-    // Use a microtask to avoid blocking the UI thread
-    await Future.microtask(() async {
-      // Add a small delay to simulate processing
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      final assistantResponse = _generateResponse(content);
-      final assistantTokens = _estimateTokenCount(assistantResponse);
-
-      // Check if we have enough tokens for the response
-      if (assistantTokens > _availableTokens) {
-        // Not enough tokens for full response
-        final shortenedResponse =
-            "I apologize, but you don't have enough tokens for a complete response. Please reduce token usage or purchase more tokens.";
-        final shortenedTokens = _estimateTokenCount(shortenedResponse);
-
-        final assistantMessage = Message(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          content: shortenedResponse,
-          type: MessageType.assistant,
-          timestamp: DateTime.now(),
-          tokenCount: shortenedTokens,
-        );
-
-        final updatedMessagesWithResponse = [
-          ...updatedMessages,
-          assistantMessage,
-        ];
-
-        _currentConversation = _currentConversation!.copyWith(
-          messages: updatedMessagesWithResponse,
-          updatedAt: DateTime.now(),
-        );
-
-        if (index != -1) {
-          _conversations[index] = _currentConversation!;
-        }
-
-        // Deduct shortened response tokens
-        _availableTokens -= shortenedTokens;
-        _totalTokensUsed += shortenedTokens;
-      } else {
-        // Enough tokens for full response
-        final assistantMessage = Message(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          content: assistantResponse,
-          type: MessageType.assistant,
-          timestamp: DateTime.now(),
-          tokenCount: assistantTokens,
-        );
-
-        final updatedMessagesWithResponse = [
-          ...updatedMessages,
-          assistantMessage,
-        ];
-
-        _currentConversation = _currentConversation!.copyWith(
-          messages: updatedMessagesWithResponse,
-          updatedAt: DateTime.now(),
-        );
-
-        if (index != -1) {
-          _conversations[index] = _currentConversation!;
-        }
-
-        // Deduct assistant response tokens
-        _availableTokens -= assistantTokens;
-        _totalTokensUsed += assistantTokens;
+    try {
+      // Get authentication token
+      final authToken = await _getAuthToken();
+      if (authToken == null) {
+        throw Exception('Authentication token not found');
       }
 
+      // Prepare conversation history for API
+      List<Map<String, dynamic>> messageHistory = [];
+
+      // Only include previous messages if this is not a new conversation
+      if (_currentConversation!.messages.length > 1) {
+        for (final message in _currentConversation!.messages) {
+          if (message.id != userMessage.id) {
+            // Skip the message we just added
+            messageHistory.add({
+              'role': message.type == MessageType.user ? 'user' : 'assistant',
+              'content': message.content,
+            });
+          }
+        }
+      }
+
+      // Check if this is a new conversation or an existing one
+      final bool isNewConversation =
+          _isNewConversation(_currentConversation!.id);
+
+      // Prepare request body according to API documentation
+      Map<String, dynamic> requestBody;
+
+      if (isNewConversation) {
+        // First request - create a new conversation
+        requestBody = {
+          'content': content,
+          'assistant': {
+            'id': _getModelId(_selectedAgent),
+            'model': 'dify',
+            'files': [],
+            'metadata': {
+              'conversation': {
+                'messages': messageHistory,
+              },
+            },
+          },
+        };
+      } else {
+        // Subsequent request - use existing conversation ID
+        requestBody = {
+          'content': content,
+          'files': [],
+          'metadata': {
+            'conversation': {
+              'id': _currentConversation!.id,
+              'messages': [] // Empty messages array as per the example
+            }
+          },
+          'assistant': {
+            'id': _getModelId(_selectedAgent),
+            'model': 'dify',
+            'name': _selectedAgent
+          }
+        };
+      }
+
+      // Log the request for debugging
+      print('Sending request to API: ${jsonEncode(requestBody)}');
+
+      // Make API request
+      final response = await http.post(
+        Uri.parse('$_baseUrl$_apiPath'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+        body: jsonEncode(requestBody),
+      );
+
+      // Log the response for debugging
+      print('API response status: ${response.statusCode}');
+      print('API response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        // Parse response
+        final responseData = jsonDecode(response.body);
+        final assistantMessage = responseData['message'] as String;
+        final conversationId = responseData['conversationId'] as String;
+        final remainingUsage = responseData['remainingUsage'] as int;
+
+        // Update conversation ID if this is a new conversation
+        if (isNewConversation) {
+          _currentConversation = _currentConversation!.copyWith(
+            id: conversationId,
+          );
+
+          // Update the conversation in the list
+          if (index != -1) {
+            _conversations[index] = _currentConversation!;
+          }
+        }
+
+        // Create assistant message
+        final message = Message(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          content: assistantMessage,
+          type: MessageType.assistant,
+          timestamp: DateTime.now(),
+          tokenCount: _estimateTokenCount(assistantMessage),
+        );
+
+        // Add assistant message to conversation
+        final updatedMessagesWithResponse = [
+          ..._currentConversation!.messages,
+          message,
+        ];
+
+        _currentConversation = _currentConversation!.copyWith(
+          messages: updatedMessagesWithResponse,
+          updatedAt: DateTime.now(),
+        );
+
+        if (index != -1) {
+          _conversations[index] = _currentConversation!;
+        }
+
+        // Update available tokens based on API response
+        _availableTokens = remainingUsage;
+      } else {
+        // Handle error response
+        throw Exception(
+            'Failed to send message: ${response.statusCode} ${response.body}');
+      }
+    } catch (e) {
+      // Add error message to conversation
+      final errorMessage = Message(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        content:
+            'Error: Failed to get response from AI. Please try again later.',
+        type: MessageType.assistant,
+        timestamp: DateTime.now(),
+        tokenCount: 10,
+      );
+
+      final updatedMessagesWithError = [
+        ..._currentConversation!.messages,
+        errorMessage,
+      ];
+
+      _currentConversation = _currentConversation!.copyWith(
+        messages: updatedMessagesWithError,
+        updatedAt: DateTime.now(),
+      );
+
+      if (index != -1) {
+        _conversations[index] = _currentConversation!;
+      }
+
+      print('Error sending message: $e');
+    } finally {
       _isLoading = false;
       notifyListeners();
-    });
+    }
   }
 
   // New method to send an image message
@@ -318,7 +743,7 @@ class ChatProvider extends ChangeNotifier {
     // Save the image to app documents directory
     final appDir = await getApplicationDocumentsDirectory();
     final fileName = 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final savedImage = await imageFile.copy('${appDir.path}/$fileName');
+    final savedImage = await imageFile.copy('${appDir.path}/$fileName}');
     final imageUrl = savedImage.path;
 
     // Create image message
@@ -368,78 +793,99 @@ class ChatProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      // Get authentication token
+      final authToken = await _getAuthToken();
+      if (authToken == null) {
+        throw Exception('Authentication token not found');
+      }
 
-    // Simulate AI analyzing the image
-    String response;
-    if (caption.isEmpty) {
-      response =
-          "I can see the image you've shared. What would you like to know about it?";
-    } else if (caption.toLowerCase().contains('what') ||
-        caption.toLowerCase().contains('describe')) {
-      response =
-          "Based on the image you shared, I can see what appears to be a photograph. To provide a more detailed description, I'd need to analyze the specific content. The image quality looks good, and I can make out the main elements. Is there something specific about this image you'd like me to focus on?";
-    } else {
-      response =
-          "Thanks for sharing this image with the caption: \"$caption\". I've analyzed what you've shared. Is there anything specific about this image you'd like me to explain or discuss?";
-    }
+      // TODO: Implement image upload to the API
+      // For now, we'll use a placeholder response
+      await Future.delayed(const Duration(seconds: 1));
 
-    final assistantTokens = _estimateTokenCount(response);
+      String response;
+      if (caption.isEmpty) {
+        response =
+            "I can see the image you've shared. What would you like to know about it?";
+      } else if (caption.toLowerCase().contains('what') ||
+          caption.toLowerCase().contains('describe')) {
+        response =
+            "Based on the image you shared, I can see what appears to be a photograph. To provide a more detailed description, I'd need to analyze the specific content. The image quality looks good, and I can make out the main elements. Is there something specific about this image you'd like me to focus on?";
+      } else {
+        response =
+            "Thanks for sharing this image with the caption: \"$caption\". I've analyzed what you've shared. Is there anything specific about this image you'd like me to explain or discuss?";
+      }
 
-    // Check if we have enough tokens
-    if (assistantTokens > _availableTokens) {
-      response =
-          "I can see your image, but I don't have enough tokens to provide a detailed analysis. Please purchase more tokens.";
-    }
+      final assistantTokens = _estimateTokenCount(response);
 
-    final assistantMessage = Message(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      content: response,
-      type: MessageType.assistant,
-      timestamp: DateTime.now(),
-      tokenCount: _estimateTokenCount(response),
-    );
+      // Check if we have enough tokens
+      if (assistantTokens > _availableTokens) {
+        response =
+            "I can see your image, but I don't have enough tokens to provide a detailed analysis. Please purchase more tokens.";
+      }
 
-    final updatedMessages = [
-      ..._currentConversation!.messages,
-      assistantMessage,
-    ];
+      final assistantMessage = Message(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        content: response,
+        type: MessageType.assistant,
+        timestamp: DateTime.now(),
+        tokenCount: _estimateTokenCount(response),
+      );
 
-    _currentConversation = _currentConversation!.copyWith(
-      messages: updatedMessages,
-      updatedAt: DateTime.now(),
-    );
+      final updatedMessages = [
+        ..._currentConversation!.messages,
+        assistantMessage,
+      ];
 
-    final index = _conversations.indexWhere(
-      (conversation) => conversation.id == _currentConversation!.id,
-    );
+      _currentConversation = _currentConversation!.copyWith(
+        messages: updatedMessages,
+        updatedAt: DateTime.now(),
+      );
 
-    if (index != -1) {
-      _conversations[index] = _currentConversation!;
-    }
+      final index = _conversations.indexWhere(
+        (conversation) => conversation.id == _currentConversation!.id,
+      );
 
-    // Deduct tokens
-    _availableTokens -= assistantTokens;
-    _totalTokensUsed += assistantTokens;
+      if (index != -1) {
+        _conversations[index] = _currentConversation!;
+      }
 
-    _isLoading = false;
-    notifyListeners();
-  }
+      // Deduct tokens
+      _availableTokens -= assistantTokens;
+      _totalTokensUsed += assistantTokens;
+    } catch (e) {
+      print('Error processing image: $e');
 
-  String _generateResponse(String userMessage) {
-    // This is a mock response generator
-    if (userMessage.toLowerCase().contains('hello') ||
-        userMessage.toLowerCase().contains('hi')) {
-      return 'Hey there! How can I assist you today?';
-    } else if (userMessage.toLowerCase().contains('help')) {
-      return 'I\'m here to help! What do you need assistance with?';
-    } else if (userMessage.toLowerCase().contains('thanks') ||
-        userMessage.toLowerCase().contains('thank you')) {
-      return 'You\'re welcome! Is there anything else I can help you with?';
-    } else if (userMessage.toLowerCase().contains('token')) {
-      return 'I see you\'re asking about tokens. You currently have $_availableTokens tokens available out of a total limit of $_maxTokenLimit. Your total token usage across all operations is $_totalTokensUsed. Tokens are consumed over time and with each interaction.';
-    } else {
-      return 'I understand you\'re asking about "${userMessage.substring(0, userMessage.length > 20 ? 20 : userMessage.length)}...". Could you provide more details so I can better assist you?';
+      // Add error message to conversation
+      final errorMessage = Message(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        content: 'Error: Failed to process image. Please try again later.',
+        type: MessageType.assistant,
+        timestamp: DateTime.now(),
+        tokenCount: 10,
+      );
+
+      final updatedMessagesWithError = [
+        ..._currentConversation!.messages,
+        errorMessage,
+      ];
+
+      _currentConversation = _currentConversation!.copyWith(
+        messages: updatedMessagesWithError,
+        updatedAt: DateTime.now(),
+      );
+
+      final index = _conversations.indexWhere(
+        (conversation) => conversation.id == _currentConversation!.id,
+      );
+
+      if (index != -1) {
+        _conversations[index] = _currentConversation!;
+      }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
@@ -493,6 +939,9 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, int> _tokenCountCache = {};
 
   int _estimateTokenCount(String text) {
+    // temporarily return 1
+    return 1;
+
     // Check cache first
     if (_tokenCountCache.containsKey(text)) {
       return _tokenCountCache[text]!;
@@ -657,5 +1106,10 @@ class ChatProvider extends ChangeNotifier {
     }
 
     return buffer.toString();
+  }
+
+  // Helper method to check if a conversation is new (hasn't been saved to the server yet)
+  bool _isNewConversation(String conversationId) {
+    return conversationId.startsWith('temp_') || !conversationId.contains('-');
   }
 }

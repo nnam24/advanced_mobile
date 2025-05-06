@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../services/ai_bot_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/ai_bot.dart';
-import '../../widgets/animated_background.dart';
+import '../../services/bot_integration_service.dart';
+import '../../utils/ui_utils.dart';
 
 class AIBotPublishScreen extends StatefulWidget {
   final AIBot bot;
@@ -14,79 +15,205 @@ class AIBotPublishScreen extends StatefulWidget {
 }
 
 class _AIBotPublishScreenState extends State<AIBotPublishScreen> {
-  final _formKey = GlobalKey<FormState>();
-  late Map<String, TextEditingController> _channelControllers;
-  late Map<String, bool> _selectedChannels;
-  bool _isLoading = false;
+  final _telegramTokenController = TextEditingController();
+  final _slackTokenController = TextEditingController();
+  final _messengerTokenController = TextEditingController();
+
+  bool _isTelegramVerified = false;
+  bool _isSlackVerified = false;
+  bool _isMessengerVerified = false;
+
+  bool _isTelegramPublished = false;
+  bool _isSlackPublished = false;
+  bool _isMessengerPublished = false;
+
+  bool _isVerifyingTelegram = false;
+  bool _isVerifyingSlack = false;
+  bool _isVerifyingMessenger = false;
+
+  bool _isPublishingTelegram = false;
+  bool _isPublishingSlack = false;
+  bool _isPublishingMessenger = false;
+
+  String? _telegramBotUrl;
 
   @override
   void initState() {
     super.initState();
+    // Check if the bot is already published to any platform
+    _checkPublishedStatus();
+  }
 
-    // Initialize controllers and selected channels
-    _channelControllers = {
-      'slack': TextEditingController(
-          text: widget.bot.publishedChannels['slack'] ?? ''),
-      'telegram': TextEditingController(
-          text: widget.bot.publishedChannels['telegram'] ?? ''),
-      'messenger': TextEditingController(
-          text: widget.bot.publishedChannels['messenger'] ?? ''),
-    };
+  void _checkPublishedStatus() {
+    // Check if the bot is already published to Telegram
+    if (widget.bot.publishedChannels.containsKey('telegram')) {
+      setState(() {
+        _isTelegramPublished = true;
+        // If we have a stored URL for the Telegram bot, use it
+        _telegramBotUrl = widget.bot.publishedChannels['telegram'];
+      });
+    }
 
-    _selectedChannels = {
-      'slack': widget.bot.publishedChannels.containsKey('slack'),
-      'telegram': widget.bot.publishedChannels.containsKey('telegram'),
-      'messenger': widget.bot.publishedChannels.containsKey('messenger'),
-    };
+    // Check if the bot is already published to Slack
+    if (widget.bot.publishedChannels.containsKey('slack')) {
+      setState(() {
+        _isSlackPublished = true;
+      });
+    }
+
+    // Check if the bot is already published to Messenger
+    if (widget.bot.publishedChannels.containsKey('messenger')) {
+      setState(() {
+        _isMessengerPublished = true;
+      });
+    }
   }
 
   @override
   void dispose() {
-    _channelControllers.forEach((_, controller) => controller.dispose());
+    _telegramTokenController.dispose();
+    _slackTokenController.dispose();
+    _messengerTokenController.dispose();
     super.dispose();
   }
 
-  Future<void> _publishBot() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+  Future<void> _verifyTelegramBot() async {
+    if (_telegramTokenController.text.isEmpty) {
+      UIUtils.showSnackBar(
+        context,
+        message: 'Please enter a Telegram bot token',
+      );
+      return;
+    }
 
-      try {
-        // Build the channels map
-        final Map<String, String> channels = {};
-        _selectedChannels.forEach((channel, isSelected) {
-          if (isSelected) {
-            channels[channel] = _channelControllers[channel]!.text.trim();
-          }
+    setState(() {
+      _isVerifyingTelegram = true;
+    });
+
+    try {
+      final botIntegrationService =
+          Provider.of<BotIntegrationService>(context, listen: false);
+      final response = await botIntegrationService
+          .verifyTelegramBot(_telegramTokenController.text);
+
+      if (mounted) {
+        setState(() {
+          _isVerifyingTelegram = false;
+          _isTelegramVerified = response.success;
         });
 
-        // Publish the bot
-        final aiBotService = Provider.of<AIBotService>(context, listen: false);
-        final success = await aiBotService.publishBot(widget.bot.id, channels);
+        if (response.success) {
+          UIUtils.showSnackBar(
+            context,
+            message: 'Telegram bot verified successfully',
+          );
+        } else {
+          UIUtils.showSnackBar(
+            context,
+            message: response.message ?? 'Failed to verify Telegram bot',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isVerifyingTelegram = false;
+        });
+        UIUtils.showSnackBar(
+          context,
+          message: 'Error verifying Telegram bot: $e',
+        );
+      }
+    }
+  }
 
-        if (success && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Bot published successfully'),
-              behavior: SnackBarBehavior.floating,
-            ),
+  Future<void> _publishToTelegram() async {
+    if (!_isTelegramVerified) {
+      UIUtils.showSnackBar(
+        context,
+        message: 'Please verify your Telegram bot first',
+      );
+      return;
+    }
+
+    setState(() {
+      _isPublishingTelegram = true;
+    });
+
+    try {
+      final botIntegrationService =
+          Provider.of<BotIntegrationService>(context, listen: false);
+      final response = await botIntegrationService.publishToTelegram(
+        widget.bot.id,
+        _telegramTokenController.text,
+      );
+
+      if (mounted) {
+        setState(() {
+          _isPublishingTelegram = false;
+          _isTelegramPublished = response.success;
+          _telegramBotUrl = response.redirectUrl;
+        });
+
+        if (response.success) {
+          String successMessage = 'AI bot published to Telegram successfully';
+          if (response.redirectUrl != null) {
+            successMessage +=
+                '. Your bot is available at ${response.redirectUrl}';
+          }
+
+          UIUtils.showSnackBar(
+            context,
+            message: successMessage,
+            duration: const Duration(seconds: 5),
           );
-          Navigator.pop(context);
-        } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to publish bot: ${aiBotService.error}'),
-              behavior: SnackBarBehavior.floating,
-            ),
+        } else {
+          UIUtils.showSnackBar(
+            context,
+            message: response.message ?? 'Failed to publish to Telegram',
           );
         }
-      } finally {
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isPublishingTelegram = false;
+        });
+        UIUtils.showSnackBar(
+          context,
+          message: 'Error publishing to Telegram: $e',
+        );
+      }
+    }
+  }
+
+  Future<void> _openTelegramBot() async {
+    if (_telegramBotUrl == null || _telegramBotUrl!.isEmpty) {
+      UIUtils.showSnackBar(
+        context,
+        message: 'Telegram bot URL is not available',
+      );
+      return;
+    }
+
+    final Uri url = Uri.parse(_telegramBotUrl!);
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
         if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
+          UIUtils.showSnackBar(
+            context,
+            message: 'Could not open: $_telegramBotUrl',
+          );
         }
+      }
+    } catch (e) {
+      if (mounted) {
+        UIUtils.showSnackBar(
+          context,
+          message: 'Error opening URL: $e',
+        );
       }
     }
   }
@@ -95,282 +222,312 @@ class _AIBotPublishScreenState extends State<AIBotPublishScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Publish Bot'),
-        actions: [
-          TextButton(
-            onPressed: _isLoading ? null : _publishBot,
-            child: _isLoading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Text('Publish'),
-          ),
-        ],
+        title: const Text('Publish AI Bot'),
       ),
-      body: Stack(
-        children: [
-          const AnimatedBackground(),
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Bot info
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Bot info card
+            Card(
+              margin: const EdgeInsets.only(bottom: 24),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: Theme.of(context)
                           .colorScheme
-                          .surface
-                          .withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .outline
-                            .withOpacity(0.2),
+                          .primary
+                          .withOpacity(0.1),
+                      child: Icon(
+                        Icons.smart_toy,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 24,
-                          backgroundColor: Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withOpacity(0.1),
-                          child: Icon(
-                            Icons.smart_toy,
-                            color: Theme.of(context).colorScheme.primary,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.bot.name,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
+                          Text(
+                            widget.bot.description,
+                            style: TextStyle(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Publish to Telegram section
+            _buildSectionTitle(context, 'Publish to Telegram'),
+            _buildInfoText(
+              'To publish your AI bot to Telegram, you need to create a bot using BotFather and get a bot token.',
+            ),
+            _buildHowToSteps([
+              'Open Telegram and search for "BotFather"',
+              'Start a chat with BotFather and use the /newbot command',
+              'Follow the instructions to name your bot',
+              'Copy the token provided by BotFather',
+            ]),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _telegramTokenController,
+              decoration: InputDecoration(
+                labelText: 'Telegram Bot Token',
+                hintText: 'Enter your Telegram bot token',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                prefixIcon: const Icon(Icons.vpn_key),
+                suffixIcon: _isTelegramVerified
+                    ? Icon(
+                        Icons.check_circle,
+                        color: Colors.green,
+                      )
+                    : null,
+              ),
+              obscureText: true,
+              enabled: !_isTelegramPublished,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isTelegramPublished || _isVerifyingTelegram
+                        ? null
+                        : _verifyTelegramBot,
+                    icon: _isVerifyingTelegram
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.check),
+                    label: const Text('Verify Bot Token'),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isTelegramPublished ||
+                            !_isTelegramVerified ||
+                            _isPublishingTelegram
+                        ? null
+                        : _publishToTelegram,
+                    icon: _isPublishingTelegram
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.publish),
+                    label: const Text('Publish to Telegram'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_isTelegramPublished)
+              Container(
+                margin: const EdgeInsets.only(top: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 8),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.bot.name,
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Text(
-                                widget.bot.description,
-                                style: TextStyle(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            'Published to Telegram',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Publish channels
-                  Text(
-                    'Publish Channels',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Select the platforms where you want to publish your bot.',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Slack
-                  _buildChannelSection(
-                    context,
-                    'slack',
-                    'Slack',
-                    Icons.chat_bubble_outline,
-                    Colors.purple,
-                    'Enter Slack workspace and channel (e.g., T123456/C789012)',
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Telegram
-                  _buildChannelSection(
-                    context,
-                    'telegram',
-                    'Telegram',
-                    Icons.send,
-                    Colors.blue,
-                    'Enter Telegram bot token or channel username',
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Messenger
-                  _buildChannelSection(
-                    context,
-                    'messenger',
-                    'Facebook Messenger',
-                    Icons.facebook,
-                    Colors.indigo,
-                    'Enter Messenger page ID',
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Publish button
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _publishBot,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Your AI bot is now available on Telegram. Users can interact with it by searching for your bot or using the link below.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                    if (_telegramBotUrl != null &&
+                        _telegramBotUrl!.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceVariant,
+                                borderRadius: BorderRadius.circular(4),
                               ),
-                            )
-                          : const Text(
-                              'Publish Bot',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                              child: Text(
+                                _telegramBotUrl!,
+                                style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Note
-                  Text(
-                    'Note: Publishing your bot will make it available to users on the selected platforms. Make sure your bot is ready for public use.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontStyle: FontStyle.italic,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+                          ),
+                          IconButton(
+                            onPressed: _openTelegramBot,
+                            icon: const Icon(Icons.open_in_new),
+                            tooltip: 'Open in Telegram',
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
               ),
+
+            const SizedBox(height: 32),
+
+            // Publish to Slack section (placeholder for future implementation)
+            _buildSectionTitle(context, 'Publish to Slack'),
+            _buildInfoText(
+              'Coming soon! You will be able to publish your AI bot to Slack in a future update.',
             ),
-          ),
-        ],
+
+            const SizedBox(height: 32),
+
+            // Publish to Messenger section (placeholder for future implementation)
+            _buildSectionTitle(context, 'Publish to Messenger'),
+            _buildInfoText(
+              'Coming soon! You will be able to publish your AI bot to Facebook Messenger in a future update.',
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildChannelSection(
-    BuildContext context,
-    String channelKey,
-    String channelName,
-    IconData icon,
-    Color color,
-    String hint,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _selectedChannels[channelKey]!
-              ? color.withOpacity(0.5)
-              : Theme.of(context).colorScheme.outline.withOpacity(0.2),
+  Widget _buildSectionTitle(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: Theme.of(context).colorScheme.primary,
         ),
+      ),
+    );
+  }
+
+  Widget _buildInfoText(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHowToSteps(List<String> steps) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                icon,
-                color: color,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                channelName,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              Switch(
-                value: _selectedChannels[channelKey]!,
-                onChanged: (value) {
-                  setState(() {
-                    _selectedChannels[channelKey] = value;
-                  });
-                },
-                activeColor: color,
-              ),
-            ],
+          Text(
+            'How to get a bot token:',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
-          if (_selectedChannels[channelKey]!) ...[
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _channelControllers[channelKey],
-              decoration: InputDecoration(
-                labelText: '$channelName ID/Token',
-                hintText: hint,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              validator: (value) {
-                if (_selectedChannels[channelKey]! &&
-                    (value == null || value.isEmpty)) {
-                  return 'Please enter the $channelName ID or token';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: () {
-                // This would open documentation or help
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('$channelName integration documentation'),
-                    behavior: SnackBarBehavior.floating,
+          const SizedBox(height: 8),
+          ...steps.asMap().entries.map((entry) {
+            final index = entry.key;
+            final step = entry.value;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 24,
+                    height: 24,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '${index + 1}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
-                );
-              },
-              icon: const Icon(Icons.help_outline, size: 16),
-              label: const Text('How to get this?'),
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle: const TextStyle(fontSize: 12),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      step,
+                      style: const TextStyle(height: 1.5),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
+            );
+          }).toList(),
         ],
       ),
     );

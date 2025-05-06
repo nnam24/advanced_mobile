@@ -36,14 +36,14 @@ class Conversation {
   }
 
   factory Conversation.empty() {
+    final now = DateTime.now();
     return Conversation(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: 'temp_${now.millisecondsSinceEpoch}', // Temporary ID that will be replaced with the real conversation ID from the API
       title: 'New Conversation',
       agentName: 'Claude 3.5 Sonnet',
       messages: [],
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
+      createdAt: now,
+      updatedAt: now,
     );
   }
 }
-

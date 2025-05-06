@@ -15,6 +15,8 @@ import 'providers/chat_provider.dart';
 import 'providers/subscription_provider.dart';
 import 'providers/prompt_provider.dart';
 import 'services/ai_bot_service.dart';
+import 'services/prompt_service.dart'; // Added import for PromptService
+import 'services/bot_integration_service.dart'; // Added import for BotIntegrationService
 import 'theme/app_theme.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -39,6 +41,12 @@ void main() {
   // Initialize memory management
   MemoryManager().initialize();
 
+  // Create instances that require parameters
+  final promptService = PromptService();
+  final promptProvider = PromptProvider(promptService: promptService);
+  final botIntegrationService =
+      BotIntegrationService(); // Create BotIntegrationService instance
+
   // Run the app with optimized providers
   runApp(
     MultiProvider(
@@ -49,7 +57,11 @@ void main() {
         ChangeNotifierProvider.value(value: ChatProvider()),
         ChangeNotifierProvider.value(value: AIBotService()),
         ChangeNotifierProvider.value(value: SubscriptionProvider()),
-        ChangeNotifierProvider.value(value: PromptProvider()),
+        ChangeNotifierProvider.value(
+            value: promptProvider), // Updated to use the pre-created instance
+        ChangeNotifierProvider.value(
+            value:
+                botIntegrationService), // Add BotIntegrationService to providers
       ],
       child: const JarvisApp(),
     ),

@@ -52,6 +52,16 @@ class _LoginScreenState extends State<LoginScreen>
     );
 
     _animationController.forward();
+
+    // Check if user is already logged in
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.isAuthenticated) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      }
+    });
   }
 
   @override
@@ -73,22 +83,34 @@ class _LoginScreenState extends State<LoginScreen>
       HapticFeedback.lightImpact();
 
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+      // Call the API-integrated login method
       final success = await authProvider.login(
         _emailController.text.trim(),
         _passwordController.text,
       );
 
       if (success && mounted) {
+        // Navigate to home screen on success
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const HomeScreen()),
         );
       } else if (mounted) {
+        // Show error message from the API
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Login failed. Please check your credentials.'),
+          SnackBar(
+            content: Text(authProvider.error.isNotEmpty
+                ? authProvider.error
+                : 'Login failed. Please check your credentials.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
+      }
+
+      // Store remember me preference if needed
+      if (_rememberMe && success) {
+        // You could implement this by storing a flag in SharedPreferences
+        // For now, we'll just use the token storage which already happens in AuthProvider
       }
     }
   }
@@ -251,7 +273,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) =>
-                                        const ForgotPasswordScreen(),
+                                    const ForgotPasswordScreen(),
                                   ),
                                 );
                               },
@@ -278,21 +300,21 @@ class _LoginScreenState extends State<LoginScreen>
                           ),
                           child: authProvider.isLoading
                               ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white),
-                                  ),
-                                )
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white),
+                            ),
+                          )
                               : const Text(
-                                  'Login',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                            'Login',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
 
                         const SizedBox(height: 16),
@@ -305,7 +327,7 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                             Padding(
                               padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
+                              const EdgeInsets.symmetric(horizontal: 16),
                               child: Text(
                                 'Or continue with',
                                 style: TextStyle(
@@ -332,7 +354,14 @@ class _LoginScreenState extends State<LoginScreen>
                               'assets/images/google_logo.png',
                               'Google',
                               isDarkMode,
-                              () => authProvider.loginWithGoogle(),
+                                  () async {
+                                final success = await authProvider.loginWithGoogle();
+                                if (success && mounted) {
+                                  Navigator.of(context).pushReplacement(
+                                    MaterialPageRoute(builder: (context) => const HomeScreen()),
+                                  );
+                                }
+                              },
                             ),
                             const SizedBox(width: 16),
                             _buildSocialLoginButton(
@@ -340,7 +369,14 @@ class _LoginScreenState extends State<LoginScreen>
                               'assets/images/apple_logo.png',
                               'Apple',
                               isDarkMode,
-                              () => authProvider.loginWithApple(),
+                                  () async {
+                                final success = await authProvider.loginWithApple();
+                                if (success && mounted) {
+                                  Navigator.of(context).pushReplacement(
+                                    MaterialPageRoute(builder: (context) => const HomeScreen()),
+                                  );
+                                }
+                              },
                             ),
                           ],
                         ),
@@ -365,7 +401,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) =>
-                                        const RegisterScreen(),
+                                    const RegisterScreen(),
                                   ),
                                 );
                               },
@@ -392,15 +428,15 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _buildSocialLoginButton(
-    BuildContext context,
-    String iconPath,
-    String label,
-    bool isDarkMode,
-    VoidCallback onPressed,
-  ) {
+      BuildContext context,
+      String iconPath,
+      String label,
+      bool isDarkMode,
+      VoidCallback onPressed,
+      ) {
     // Since we don't have actual assets, we'll use icons instead
     IconData iconData =
-        label == 'Google' ? FontAwesomeIcons.google : Icons.apple;
+    label == 'Google' ? FontAwesomeIcons.google : Icons.apple;
 
     return Expanded(
       child: OutlinedButton(
@@ -414,7 +450,7 @@ class _LoginScreenState extends State<LoginScreen>
             color: Theme.of(context).colorScheme.outline,
           ),
           backgroundColor:
-              isDarkMode ? Theme.of(context).colorScheme.surface : Colors.white,
+          isDarkMode ? Theme.of(context).colorScheme.surface : Colors.white,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -425,8 +461,8 @@ class _LoginScreenState extends State<LoginScreen>
               color: label == 'Google'
                   ? Colors.red
                   : isDarkMode
-                      ? Colors.white
-                      : Colors.black,
+                  ? Colors.white
+                  : Colors.black,
             ),
             const SizedBox(width: 8),
             Text(label),
@@ -436,3 +472,4 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 }
+

@@ -5,18 +5,18 @@ import 'package:image_picker/image_picker.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/prompt_provider.dart';
-import '../models/message.dart';
-import '../models/conversation.dart';
 import '../models/prompt.dart';
 import '../widgets/animated_background.dart';
 import '../widgets/message_bubble.dart';
+import '../widgets/chat_history_drawer.dart';
 import 'profile/profile_screen.dart';
 import 'auth/login_screen.dart';
 import 'ai_bot/ai_bot_list_screen.dart';
 import 'knowledge/knowledge_list_screen.dart';
 import 'prompts/prompts_screen.dart';
 import 'email/email_compose_screen.dart';
-import 'package:flutter/services.dart';
+import 'chat/chat_history_screen.dart';
+import 'prompts/prompt_create_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -58,6 +58,41 @@ class _HomeScreenState extends State<HomeScreen>
           MaterialPageRoute(builder: (context) => const LoginScreen()),
         );
       }
+
+      // Fetch prompts when the screen loads
+      final promptProvider =
+          Provider.of<PromptProvider>(context, listen: false);
+      if (promptProvider.prompts.isEmpty) {
+        promptProvider.fetchPrompts(isPublic: true, refresh: true);
+      }
+    });
+
+    // Set up session expiration handler
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+      // Set callback for session expiration
+      authProvider.onSessionExpired = (String reason) {
+        // Navigate to login screen
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+
+        // Show error message as a snackbar after navigation
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(reason),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
+        });
+      };
     });
   }
 
@@ -153,6 +188,11 @@ class _HomeScreenState extends State<HomeScreen>
     final promptProvider = Provider.of<PromptProvider>(context, listen: false);
     final size = MediaQuery.of(context).size;
 
+    // If prompts are empty and not already loading, fetch them
+    if (promptProvider.prompts.isEmpty && !promptProvider.isLoading) {
+      promptProvider.fetchPrompts(isPublic: true, refresh: true);
+    }
+
     // Filter prompts based on the query
     final filteredPrompts = promptProvider.prompts
         .where((prompt) =>
@@ -218,69 +258,98 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
                 const Divider(height: 1),
                 Flexible(
-                  child: filteredPrompts.isEmpty
+                  child: promptProvider.isLoading && filteredPrompts.isEmpty
                       ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Text(
-                              'No prompts found. Try a different search or browse all prompts.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        )
-                      : ListView.separated(
-                          shrinkWrap: true,
-                          padding: EdgeInsets.zero,
-                          itemCount: filteredPrompts.length,
-                          separatorBuilder: (context, index) =>
-                              const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final prompt = filteredPrompts[index];
-                            return ListTile(
-                              dense: true,
-                              title: Text(
-                                prompt.title,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Theme.of(context).colorScheme.primary,
+                                  ),
                                 ),
                               ),
-                              subtitle: Text(
-                                prompt.content.length > 60
-                                    ? '${prompt.content.substring(0, 60)}...'
-                                    : prompt.content,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                              leading: CircleAvatar(
-                                radius: 16,
-                                backgroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .primaryContainer,
-                                child: Icon(
-                                  _getCategoryIcon(prompt.category),
-                                  size: 16,
+                              const SizedBox(height: 8),
+                              Text(
+                                'Loading prompts...',
+                                style: TextStyle(
+                                  fontSize: 12,
                                   color: Theme.of(context)
                                       .colorScheme
-                                      .onPrimaryContainer,
+                                      .onSurfaceVariant,
                                 ),
                               ),
-                              trailing: prompt.isFavorite
-                                  ? Icon(
-                                      Icons.favorite,
+                            ],
+                          ),
+                        )
+                      : filteredPrompts.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Text(
+                                  'No prompts found. Try a different search or browse all prompts.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              padding: EdgeInsets.zero,
+                              itemCount: filteredPrompts.length,
+                              separatorBuilder: (context, index) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final prompt = filteredPrompts[index];
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(
+                                    prompt.title,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    prompt.content.length > 60
+                                        ? '${prompt.content.substring(0, 60)}...'
+                                        : prompt.content,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  leading: CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer,
+                                    child: Icon(
+                                      Prompt.getCategoryIcon(prompt.category),
                                       size: 16,
-                                      color:
-                                          Theme.of(context).colorScheme.error,
-                                    )
-                                  : null,
-                              onTap: () => _insertPrompt(prompt),
-                            );
-                          },
-                        ),
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onPrimaryContainer,
+                                    ),
+                                  ),
+                                  trailing: prompt.isFavorite
+                                      ? Icon(
+                                          Icons.favorite,
+                                          size: 16,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .error,
+                                        )
+                                      : null,
+                                  onTap: () => _insertPrompt(prompt),
+                                );
+                              },
+                            ),
                 ),
                 const Divider(height: 1),
                 InkWell(
@@ -314,25 +383,6 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       ),
     );
-  }
-
-  IconData _getCategoryIcon(PromptCategory category) {
-    switch (category) {
-      case PromptCategory.general:
-        return Icons.lightbulb_outline;
-      case PromptCategory.coding:
-        return Icons.code;
-      case PromptCategory.business:
-        return Icons.business;
-      case PromptCategory.creative:
-        return Icons.brush;
-      case PromptCategory.academic:
-        return Icons.school;
-      case PromptCategory.personal:
-        return Icons.person;
-      default:
-        return Icons.auto_awesome;
-    }
   }
 
   void _insertPrompt(Prompt prompt) {
@@ -390,13 +440,26 @@ class _HomeScreenState extends State<HomeScreen>
 
     _messageController.clear();
 
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-    await chatProvider.sendMessage(message);
+    try {
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      await chatProvider.sendMessage(message);
 
-    // Scroll to bottom after sending message
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottom();
-    });
+      // Scroll to bottom after sending message
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
+      });
+    } catch (e) {
+      // Show error message if API call fails
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send message: ${e.toString()}'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   // Method to pick image from gallery
@@ -481,7 +544,18 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
+  // Fixed method to show prompt selector
   void _showPromptSelector() {
+    final promptProvider = Provider.of<PromptProvider>(context, listen: false);
+
+    // Reset any filters that might be applied
+    promptProvider.setSearchQuery('');
+    promptProvider.setCategory(null);
+
+    // Important: Don't set any isPublic filter to get all prompts
+    // Just call fetchPrompts without the isPublic parameter
+    promptProvider.fetchPrompts(refresh: true);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -501,6 +575,24 @@ class _HomeScreenState extends State<HomeScreen>
     return Consumer<PromptProvider>(
       builder: (context, promptProvider, _) {
         final prompts = promptProvider.prompts;
+
+        // Debug print to see what's happening
+        print(
+            'Building prompt selector: ${prompts.length} prompts, isPublic filter: ${promptProvider.isPublicFilter}');
+
+        // Show loading indicator if prompts are being loaded
+        if (promptProvider.isLoading && prompts.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Loading prompts...'),
+              ],
+            ),
+          );
+        }
 
         return Column(
           children: [
@@ -556,7 +648,7 @@ class _HomeScreenState extends State<HomeScreen>
                     return Padding(
                       padding: const EdgeInsets.only(right: 8.0),
                       child: FilterChip(
-                        label: Text(_getCategoryName(category)),
+                        label: Text(Prompt.getCategoryName(category)),
                         selected: promptProvider.selectedCategory == category,
                         onSelected: (selected) {
                           promptProvider
@@ -606,7 +698,7 @@ class _HomeScreenState extends State<HomeScreen>
                                   .colorScheme
                                   .primaryContainer,
                               child: Icon(
-                                _getCategoryIcon(prompt.category),
+                                Prompt.getCategoryIcon(prompt.category),
                                 color: Theme.of(context)
                                     .colorScheme
                                     .onPrimaryContainer,
@@ -655,25 +747,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  String _getCategoryName(PromptCategory category) {
-    switch (category) {
-      case PromptCategory.general:
-        return 'General';
-      case PromptCategory.coding:
-        return 'Coding';
-      case PromptCategory.business:
-        return 'Business';
-      case PromptCategory.creative:
-        return 'Creative';
-      case PromptCategory.academic:
-        return 'Academic';
-      case PromptCategory.personal:
-        return 'Personal';
-      default:
-        return 'Unknown';
-    }
-  }
-
   void _usePrompt(Prompt prompt) {
     // Increment usage count
     final promptProvider = Provider.of<PromptProvider>(context, listen: false);
@@ -700,15 +773,29 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  // Add this method to the _HomeScreenState class to navigate to the PromptCreateScreen
+  void _navigateToCreatePrompt() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PromptCreateScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final chatProvider = Provider.of<ChatProvider>(context);
     final currentConversation = chatProvider.currentConversation;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final mediaQuery = MediaQuery.of(context);
+    final bottomPadding = mediaQuery.viewInsets.bottom;
 
     return Scaffold(
       drawer: _buildDrawer(context),
+      endDrawer: const ChatHistoryDrawer(),
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Text(
           currentConversation?.title ?? 'New Conversation',
@@ -718,6 +805,19 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
         actions: [
+          // Chat history button
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Chat History',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ChatHistoryScreen(),
+                ),
+              );
+            },
+          ),
           // AI Model selector as a dropdown in the AppBar
           DropdownButton<String>(
             value: chatProvider.selectedAgent,
@@ -758,18 +858,58 @@ class _HomeScreenState extends State<HomeScreen>
             },
           ),
           PopupMenuButton<String>(
-            onSelected: (value) {
+            onSelected: (value) async {
               if (value == 'new') {
                 chatProvider.createNewConversation();
               } else if (value == 'clear') {
                 chatProvider.reduceTokenUsage();
               } else if (value == 'logout') {
-                authProvider.logout().then((_) {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                        builder: (context) => const LoginScreen()),
-                  );
-                });
+                // Show loading indicator
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Row(
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        SizedBox(width: 16),
+                        Text('Logging out...'),
+                      ],
+                    ),
+                    duration: Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+
+                try {
+                  // Call the API logout method
+                  await authProvider.logout();
+
+                  // Navigate to login screen after successful logout
+                  if (context.mounted) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                          builder: (context) => const LoginScreen()),
+                      (route) => false, // This removes all previous routes
+                    );
+                  }
+                } catch (e) {
+                  // Show error if logout fails
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Logout failed: ${e.toString()}'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
               }
             },
             itemBuilder: (context) => [
@@ -818,266 +958,296 @@ class _HomeScreenState extends State<HomeScreen>
         controller: _tabController,
         children: [
           // Chat Tab
-          Stack(
-            children: [
-              const AnimatedBackground(),
-              Column(
+          SafeArea(
+            bottom: false, // Don't add padding at the bottom
+            child: GestureDetector(
+              onTap: () {
+                // Dismiss keyboard when tapping outside of text field
+                FocusScope.of(context).unfocus();
+              },
+              child: Stack(
                 children: [
-                  // Token indicator
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    color:
-                        Theme.of(context).colorScheme.surface.withOpacity(0.8),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.token,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: LinearProgressIndicator(
-                            value: chatProvider.tokenAvailabilityPercentage,
-                            backgroundColor:
-                                Theme.of(context).colorScheme.surfaceVariant,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              chatProvider.tokenAvailabilityPercentage > 0.2
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Colors.red,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${chatProvider.availableTokens} / ${chatProvider.tokenLimit}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // AI Model Selector
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    color:
-                        Theme.of(context).colorScheme.surface.withOpacity(0.5),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Current AI:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            chatProvider.selectedAgent,
-                            style: TextStyle(
+                  const AnimatedBackground(),
+                  Column(
+                    children: [
+                      // Token indicator
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surface
+                            .withOpacity(0.8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.token,
+                              size: 16,
                               color: Theme.of(context).colorScheme.primary,
-                              fontWeight: FontWeight.w500,
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: LinearProgressIndicator(
+                                value: chatProvider.tokenAvailabilityPercentage,
+                                backgroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceVariant,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  chatProvider.tokenAvailabilityPercentage > 0.2
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Colors.red,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${chatProvider.availableTokens} / ${chatProvider.tokenLimit}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
+                          ],
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.info_outline, size: 18),
-                          tooltip: 'Model Info',
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: Text(chatProvider.selectedAgent),
-                                content: Text(
-                                    chatProvider.getAIModelCapabilities(
-                                        chatProvider.selectedAgent)),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(context).pop(),
-                                    child: const Text('Close'),
+                      ),
+
+                      // AI Model Selector
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surface
+                            .withOpacity(0.5),
+                        child: Row(
+                          children: [
+                            Text(
+                              'Current AI:',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                chatProvider.selectedAgent,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.info_outline, size: 18),
+                              tooltip: 'Model Info',
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: Text(chatProvider.selectedAgent),
+                                    content: Text(
+                                        chatProvider.getAIModelCapabilities(
+                                            chatProvider.selectedAgent)),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(),
+                                        child: const Text('Close'),
+                                      ),
+                                    ],
                                   ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Messages
+                      Expanded(
+                        child: currentConversation == null ||
+                                currentConversation.messages.isEmpty
+                            ? _buildEmptyState(context)
+                            : Stack(
+                                children: [
+                                  ListView.builder(
+                                    controller: _scrollController,
+                                    padding: const EdgeInsets.only(
+                                      left: 16,
+                                      right: 16,
+                                      top: 16,
+                                      bottom:
+                                          80, // Add extra bottom padding for input field
+                                    ),
+                                    itemCount:
+                                        currentConversation.messages.length,
+                                    itemBuilder: (context, index) {
+                                      final message =
+                                          currentConversation.messages[index];
+                                      return MessageBubble(
+                                        key: ValueKey(message.id),
+                                        message: message,
+                                      );
+                                    },
+                                  ),
+                                  if (_showScrollToBottom)
+                                    Positioned(
+                                      right: 16,
+                                      bottom: 16,
+                                      child: FloatingActionButton.small(
+                                        onPressed: _scrollToBottom,
+                                        child: const Icon(Icons.arrow_downward),
+                                      ),
+                                    ),
                                 ],
                               ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
+                      ),
 
-                  // Messages
-                  Expanded(
-                    child: currentConversation == null ||
-                            currentConversation.messages.isEmpty
-                        ? _buildEmptyState(context)
-                        : Stack(
+                      // Loading indicator
+                      if (chatProvider.isLoading)
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          child: Row(
                             children: [
-                              ListView.builder(
-                                controller: _scrollController,
-                                padding: const EdgeInsets.all(16),
-                                itemCount: currentConversation.messages.length,
-                                itemBuilder: (context, index) {
-                                  final message =
-                                      currentConversation.messages[index];
-                                  return MessageBubble(
-                                    key: ValueKey(message.id),
-                                    message: message,
-                                  );
-                                },
-                              ),
-                              if (_showScrollToBottom)
-                                Positioned(
-                                  right: 16,
-                                  bottom: 16,
-                                  child: FloatingActionButton.small(
-                                    onPressed: _scrollToBottom,
-                                    child: const Icon(Icons.arrow_downward),
+                              Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceVariant,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Theme.of(context).colorScheme.primary,
+                                      ),
+                                    ),
                                   ),
                                 ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Thinking...',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
                             ],
                           ),
-                  ),
+                        ),
 
-                  // Loading indicator
-                  if (chatProvider.isLoading)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color:
-                                  Theme.of(context).colorScheme.surfaceVariant,
-                              shape: BoxShape.circle,
+                      // Message input - fixed height container
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surface
+                              .withOpacity(0.95),
+                          border: Border(
+                            top: BorderSide(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outline
+                                  .withOpacity(0.2),
                             ),
-                            child: Center(
-                              child: SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                        child: CompositedTransformTarget(
+                          link: _layerLink,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.attach_file, size: 20),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () {
+                                  setState(() {
+                                    _showAttachmentOptions =
+                                        !_showAttachmentOptions;
+                                  });
+                                  if (_showAttachmentOptions) {
+                                    _showAttachmentOptionsBottomSheet();
+                                  }
+                                },
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxHeight: 100, // Limit max height
+                                  ),
+                                  child: TextField(
+                                    controller: _messageController,
+                                    focusNode: _messageFocusNode,
+                                    decoration: InputDecoration(
+                                      hintText: chatProvider.hasTokens
+                                          ? 'Type a message...'
+                                          : 'Out of tokens',
+                                      hintStyle: const TextStyle(fontSize: 14),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      filled: true,
+                                      fillColor: isDarkMode
+                                          ? Colors.grey.shade800
+                                          : Colors.grey.shade200,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      isDense: true,
+                                      suffixIcon: IconButton(
+                                        icon: const Icon(Icons.auto_awesome,
+                                            size: 20),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        onPressed: _showPromptSelector,
+                                      ),
+                                    ),
+                                    style: const TextStyle(fontSize: 14),
+                                    maxLines: null,
+                                    minLines: 1,
+                                    textInputAction: TextInputAction.newline,
+                                    keyboardType: TextInputType.multiline,
+                                    enabled: chatProvider.hasTokens,
                                   ),
                                 ),
                               ),
-                            ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                icon: const Icon(Icons.send, size: 20),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: chatProvider.hasTokens
+                                    ? _sendMessage
+                                    : null,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 16),
-                          Text(
-                            'Thinking...',
-                            style: TextStyle(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  // Message input
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surface
-                          .withOpacity(0.8),
-                      border: Border(
-                        top: BorderSide(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .outline
-                              .withOpacity(0.2),
                         ),
                       ),
-                    ),
-                    child: CompositedTransformTarget(
-                      link: _layerLink,
-                      child: Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.attach_file),
-                            tooltip: 'Attach file or image',
-                            onPressed: () {
-                              setState(() {
-                                _showAttachmentOptions =
-                                    !_showAttachmentOptions;
-                              });
-                              if (_showAttachmentOptions) {
-                                _showAttachmentOptionsBottomSheet();
-                              }
-                            },
-                          ),
-                          Expanded(
-                            child: TextField(
-                              controller: _messageController,
-                              focusNode: _messageFocusNode,
-                              decoration: InputDecoration(
-                                hintText: chatProvider.hasTokens
-                                    ? 'Type a message or "/" for prompts...'
-                                    : 'Out of tokens. Upgrade your plan.',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(24),
-                                  borderSide: BorderSide.none,
-                                ),
-                                filled: true,
-                                fillColor: isDarkMode
-                                    ? Colors.grey.shade800
-                                    : Colors.grey.shade200,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                                suffixIcon: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.auto_awesome),
-                                      tooltip: 'Browse prompts',
-                                      onPressed: _showPromptSelector,
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.mic),
-                                      tooltip: 'Voice input',
-                                      onPressed: () {
-                                        // Voice input functionality would go here
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              maxLines: null,
-                              textInputAction: TextInputAction.send,
-                              onSubmitted: (_) => _sendMessage(),
-                              enabled: chatProvider.hasTokens,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          FloatingActionButton(
-                            onPressed:
-                                chatProvider.hasTokens ? _sendMessage : null,
-                            mini: true,
-                            child: const Icon(Icons.send),
-                          ),
-                        ],
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
 
           // Email Tab
@@ -1194,6 +1364,19 @@ class _HomeScreenState extends State<HomeScreen>
             },
           ),
           ListTile(
+            leading: const Icon(Icons.history),
+            title: const Text('Chat History'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ChatHistoryScreen(),
+                ),
+              );
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.smart_toy),
             title: const Text('AI Bots'),
             onTap: () {
@@ -1265,184 +1448,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Widget _buildChatHistoryDrawer(
-      BuildContext context, ChatProvider chatProvider) {
-    return Drawer(
-      child: Column(
-        children: [
-          DrawerHeader(
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            child: SizedBox(
-              width: double.infinity, // Ensures full width
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'Conversations',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      chatProvider.createNewConversation();
-                      Navigator.pop(context);
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('New Chat'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: chatProvider.conversations.length,
-              itemBuilder: (context, index) {
-                final conversation = chatProvider.conversations[index];
-                final isSelected =
-                    chatProvider.currentConversation?.id == conversation.id;
-
-                return ListTile(
-                  title: Text(
-                    conversation.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    conversation.messages.isNotEmpty
-                        ? conversation.messages.last.content.length > 40
-                            ? '${conversation.messages.last.content.substring(0, 40)}...'
-                            : conversation.messages.last.content
-                        : 'No messages',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  leading: CircleAvatar(
-                    backgroundColor: isSelected
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.surfaceVariant,
-                    child: Icon(
-                      Icons.chat_bubble_outline,
-                      size: 18,
-                      color: isSelected
-                          ? Colors.white
-                          : Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  selected: isSelected,
-                  onTap: () {
-                    chatProvider.selectConversation(conversation.id);
-                    Navigator.pop(context);
-                  },
-                  trailing: IconButton(
-                    icon: const Icon(Icons.more_vert),
-                    onPressed: () {
-                      _showModalBottomSheet(context, conversation);
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showRenameDialog(BuildContext context, Conversation conversation) {
-    final TextEditingController titleController =
-        TextEditingController(text: conversation.title);
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rename Conversation'),
-        content: TextField(
-          controller: titleController,
-          decoration: const InputDecoration(
-            labelText: 'Conversation Title',
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final newTitle = titleController.text.trim();
-              if (newTitle.isNotEmpty) {
-                chatProvider.renameConversation(conversation.id, newTitle);
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Conversation renamed successfully'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
-            child: const Text('Rename'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteConfirmation(
-      BuildContext context, Conversation conversation) {
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Conversation'),
-        content: const Text(
-            'Are you sure you want to delete this conversation? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              chatProvider.deleteConversation(conversation.id);
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Conversation deleted'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Column(
@@ -1490,51 +1495,6 @@ class _HomeScreenState extends State<HomeScreen>
                 label: const Text('Browse prompts'),
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showModalBottomSheet(BuildContext context, Conversation conversation) {
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.edit),
-            title: const Text('Rename'),
-            onTap: () {
-              Navigator.pop(context);
-              _showRenameDialog(context, conversation);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.copy),
-            title: const Text('Export'),
-            onTap: () {
-              Navigator.pop(context);
-              final text =
-                  chatProvider.exportConversationToText(conversation.id);
-              Clipboard.setData(ClipboardData(text: text));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Conversation copied to clipboard'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete),
-            title: const Text('Delete'),
-            onTap: () {
-              Navigator.pop(context);
-              _showDeleteConfirmation(context, conversation);
-            },
           ),
         ],
       ),

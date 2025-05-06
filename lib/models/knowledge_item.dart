@@ -6,6 +6,9 @@ class KnowledgeItem {
   final String fileType;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? userId;
+  final int numUnits;
+  final int totalSize;
 
   KnowledgeItem({
     required this.id,
@@ -15,6 +18,9 @@ class KnowledgeItem {
     required this.fileType,
     required this.createdAt,
     required this.updatedAt,
+    this.userId,
+    this.numUnits = 0,
+    this.totalSize = 0,
   });
 
   KnowledgeItem copyWith({
@@ -25,6 +31,9 @@ class KnowledgeItem {
     String? fileType,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? userId,
+    int? numUnits,
+    int? totalSize,
   }) {
     return KnowledgeItem(
       id: id ?? this.id,
@@ -34,34 +43,9 @@ class KnowledgeItem {
       fileType: fileType ?? this.fileType,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  factory KnowledgeItem.empty() {
-    return KnowledgeItem(
-      id: '',
-      title: '',
-      content: '',
-      fileUrl: '',
-      fileType: '',
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-  }
-
-  factory KnowledgeItem.fromJson(Map<String, dynamic> json) {
-    return KnowledgeItem(
-      id: json['id'] ?? '',
-      title: json['title'] ?? '',
-      content: json['content'] ?? '',
-      fileUrl: json['fileUrl'] ?? '',
-      fileType: json['fileType'] ?? '',
-      createdAt: json['createdAt'] != null 
-          ? DateTime.parse(json['createdAt']) 
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] != null 
-          ? DateTime.parse(json['updatedAt']) 
-          : DateTime.now(),
+      userId: userId ?? this.userId,
+      numUnits: numUnits ?? this.numUnits,
+      totalSize: totalSize ?? this.totalSize,
     );
   }
 
@@ -74,7 +58,30 @@ class KnowledgeItem {
       'fileType': fileType,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'userId': userId,
+      'numUnits': numUnits,
+      'totalSize': totalSize,
     };
   }
-}
 
+  factory KnowledgeItem.fromJson(Map<String, dynamic> json) {
+    return KnowledgeItem(
+      id: json['id'] ??
+          json['userId'] ??
+          DateTime.now().millisecondsSinceEpoch.toString(),
+      title: json['knowledgeName'] ?? json['title'] ?? '',
+      content: json['description'] ?? json['content'] ?? '',
+      fileUrl: json['fileUrl'] ?? '',
+      fileType: json['fileType'] ?? 'text',
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : DateTime.now(),
+      userId: json['userId'],
+      numUnits: json['numUnits'] ?? 0,
+      totalSize: json['totalSize'] ?? 0,
+    );
+  }
+}

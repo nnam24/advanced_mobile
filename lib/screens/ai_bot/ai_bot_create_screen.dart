@@ -16,6 +16,7 @@ class _AIBotCreateScreenState extends State<AIBotCreateScreen> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _instructionsController = TextEditingController();
+  bool _isCreating = false;
 
   @override
   void initState() {
@@ -35,38 +36,60 @@ class _AIBotCreateScreenState extends State<AIBotCreateScreen> {
 
   Future<void> _createBot() async {
     if (_formKey.currentState!.validate()) {
-      final aiBotService = Provider.of<AIBotService>(context, listen: false);
+      setState(() {
+        _isCreating = true;
+      });
 
-      final newBot = AIBot(
-        id: '', // Will be set by the service
-        name: _nameController.text.trim(),
-        description: _descriptionController.text.trim(),
-        instructions: _instructionsController.text.trim(),
-        avatarUrl: '', // No avatar for now
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        knowledgeIds: [],
-        isPublished: false,
-        publishedChannels: {},
-      );
+      try {
+        final aiBotService = Provider.of<AIBotService>(context, listen: false);
 
-      final success = await aiBotService.createBot(newBot);
-
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('AI Bot created successfully'),
-            behavior: SnackBarBehavior.floating,
-          ),
+        // Create a new bot with the required fields according to API documentation
+        final newBot = AIBot(
+          id: '', // Will be set by the API
+          name: _nameController.text.trim(),
+          description: _descriptionController.text.trim(),
+          instructions: _instructionsController.text.trim(),
+          avatarUrl: '', // No avatar for now
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          knowledgeIds: [],
+          isPublished: false,
+          publishedChannels: {},
         );
-        Navigator.pop(context);
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to create AI Bot: ${aiBotService.error}'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+
+        final success = await aiBotService.createBot(newBot);
+
+        if (success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('AI Bot created successfully'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          Navigator.pop(context, true); // Return true to indicate success
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to create AI Bot: ${aiBotService.error}'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error creating AI Bot: $e'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isCreating = false;
+          });
+        }
       }
     }
   }
@@ -74,14 +97,15 @@ class _AIBotCreateScreenState extends State<AIBotCreateScreen> {
   @override
   Widget build(BuildContext context) {
     final aiBotService = Provider.of<AIBotService>(context);
+    final isLoading = _isCreating || aiBotService.isLoading;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Create AI Bot'),
         actions: [
           TextButton(
-            onPressed: aiBotService.isLoading ? null : _createBot,
-            child: aiBotService.isLoading
+            onPressed: isLoading ? null : _createBot,
+            child: isLoading
                 ? const SizedBox(
                     height: 20,
                     width: 20,
@@ -137,6 +161,13 @@ class _AIBotCreateScreenState extends State<AIBotCreateScreen> {
                               ),
                               onPressed: () {
                                 // Image picker functionality would go here
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Avatar upload not implemented yet'),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
                               },
                             ),
                           ),
@@ -147,7 +178,7 @@ class _AIBotCreateScreenState extends State<AIBotCreateScreen> {
 
                   const SizedBox(height: 32),
 
-                  // Name field
+                  // Name field (assistantName in API)
                   TextFormField(
                     controller: _nameController,
                     decoration: const InputDecoration(
@@ -241,11 +272,11 @@ class _AIBotCreateScreenState extends State<AIBotCreateScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: aiBotService.isLoading ? null : _createBot,
+                      onPressed: isLoading ? null : _createBot,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: aiBotService.isLoading
+                      child: isLoading
                           ? const SizedBox(
                               height: 20,
                               width: 20,
