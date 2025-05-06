@@ -1242,7 +1242,7 @@ class _HomeScreenState extends State<HomeScreen>
                                     controller: _messageController,
                                     focusNode: _messageFocusNode,
                                     decoration: InputDecoration(
-                                      hintText: (chatProvider.hasTokens)
+                                      hintText: (chatProvider.hasTokens || subscriptionProvider.hasUnlimitedTokens)
                                           ? 'Type a message...'
                                           : 'Out of tokens',
                                       hintStyle: const TextStyle(fontSize: 14),
@@ -1273,7 +1273,8 @@ class _HomeScreenState extends State<HomeScreen>
                                     minLines: 1,
                                     textInputAction: TextInputAction.newline,
                                     keyboardType: TextInputType.multiline,
-                                    enabled: chatProvider.hasTokens ,
+                                    enabled: chatProvider.hasTokens ||
+                                        subscriptionProvider.hasUnlimitedTokens,
                                   ),
                                 ),
                               ),
@@ -1282,7 +1283,8 @@ class _HomeScreenState extends State<HomeScreen>
                                 icon: const Icon(Icons.send, size: 20),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
-                                onPressed:(chatProvider.hasTokens)
+                                onPressed:(chatProvider.hasTokens ||
+                                        subscriptionProvider.hasUnlimitedTokens)
                                     ? _sendMessage
                                     : null,
                                 color: Theme.of(context).colorScheme.primary,

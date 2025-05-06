@@ -511,7 +511,7 @@ class AuthProvider extends ChangeNotifier {
     _cancelTokenRefreshTimer();
 
     // Set up timer to refresh token every 9 minutes
-    _tokenRefreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _tokenRefreshTimer = Timer.periodic(const Duration(minutes: 8), (timer) {
       debugPrint('Token refresh timer triggered at ${DateTime.now()}');
       if (_isAuthenticated && _refreshToken != null) {
         refreshAuthToken();

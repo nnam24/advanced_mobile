@@ -48,6 +48,7 @@ void main() async { // Changed to async
   final promptService = PromptService();
   final promptProvider = PromptProvider(promptService: promptService);
   final adProvider = AdProvider(); // Create AdProvider instance
+  final subscriptionProvider = SubscriptionProvider();
 
   // Run the app with optimized providers
   runApp(
@@ -56,9 +57,14 @@ void main() async { // Changed to async
         ChangeNotifierProvider(create: (context) => AuthProvider()),
         ChangeNotifierProvider(create: (context) => ThemeProvider()),
         // Lazy load providers that aren't needed immediately
-        ChangeNotifierProvider.value(value: ChatProvider()),
+        ChangeNotifierProvider.value(value: subscriptionProvider),
+
+        ChangeNotifierProxyProvider<SubscriptionProvider, ChatProvider>(
+          create: (context) => ChatProvider(subscriptionProvider),
+          update: (context, subscriptionProvider, previous) =>
+          previous ?? ChatProvider(subscriptionProvider),
+        ),
         ChangeNotifierProvider.value(value: AIBotService()),
-        ChangeNotifierProvider.value(value: SubscriptionProvider()),
         ChangeNotifierProvider.value(
             value: promptProvider),
         ChangeNotifierProvider.value(value: adProvider), // Add AdProvider
