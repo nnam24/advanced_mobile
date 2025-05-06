@@ -68,7 +68,7 @@ class AdService {
 
   // Rewarded ad
   RewardedAd? _rewardedAd;
-  bool _isRewardedAdLoaded = false;
+  bool _isRewardedAdLoaded = true;
   int _rewardedLoadAttempts = 0;
   final int _maxRewardedLoadAttempts = 3;
 
@@ -88,7 +88,7 @@ class AdService {
       tagForChildDirectedTreatment: TagForChildDirectedTreatment.unspecified,
       tagForUnderAgeOfConsent: TagForUnderAgeOfConsent.unspecified,
       maxAdContentRating: MaxAdContentRating.pg,
-      testDeviceIds: ['kGADSimulatorID'], // Add your test device IDs here
+      testDeviceIds: ['039726A9F992A902CECA2A3DF2BA0E8A'], // Add your test device IDs here
     );
     MobileAds.instance.updateRequestConfiguration(params);
 
