@@ -542,44 +542,44 @@ class KnowledgeService {
     }
   }
 
-  // Add Slack knowledge to an existing knowledge item
+  // Add Slack knowledge to an existing knowledge item - UPDATED to use new API
   Future<Map<String, dynamic>> addSlackKnowledge(
       String knowledgeId,
       String unitName,
-      String slackWorkspace,
       String? slackBotToken
       ) async {
     final token = await _getAuthToken();
-    final userGuid = await _getUserGuid();
 
     if (token == null) {
       throw Exception('Authentication token not found. Please login again.');
     }
-
-    if (userGuid == null) {
-      throw Exception('User GUID not found.');
-    }
-
-    final headers = {
-      'x-jarvis-guid': userGuid,
-      'Authorization': 'Bearer $token',
-      'Content-Type': 'application/json',
-    };
 
     // Use provided token if available, otherwise use the hardcoded one
     final botToken = slackBotToken?.isNotEmpty == true
         ? slackBotToken
         : 'xoxb-8061911376167-8767773437328-MQ6JrIBfS8jXcz1vY4z3WRMm';
 
+    final headers = {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+
+    // Create request body for adding Slack datasource
     final body = json.encode({
-      'unitName': unitName,
-      'slackWorkspace': slackWorkspace,
-      'slackBotToken': botToken,
+      'datasources': [
+        {
+          'type': 'slack',
+          'name': unitName,
+          'credentials': {
+            'token': botToken
+          }
+        }
+      ]
     });
 
     try {
-      print('Adding Slack knowledge: $unitName, Workspace: $slackWorkspace');
-      final uri = Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/slack');
+      print('Adding Slack knowledge: $unitName');
+      final uri = Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/datasources');
       print('API endpoint: $uri');
 
       final response = await http.post(

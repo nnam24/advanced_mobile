@@ -328,14 +328,13 @@ class _KnowledgeUploadScreenState extends State<KnowledgeUploadScreen> with Sing
       });
 
       final unitName = _slackNameController.text.trim();
-      final slackWorkspace = _slackWorkspaceController.text.trim();
+      // final slackWorkspace = _slackWorkspaceController.text.trim();
       final slackBotToken = _slackBotTokenController.text.trim();
 
       // Add Slack knowledge
       final result = await _knowledgeService.addSlackKnowledge(
           widget.knowledgeItem.id,
           unitName,
-          slackWorkspace,
           slackBotToken
       );
 
@@ -1064,25 +1063,25 @@ class _KnowledgeUploadScreenState extends State<KnowledgeUploadScreen> with Sing
                             const SizedBox(height: 16),
 
                             // Slack Workspace field
-                            TextFormField(
-                              controller: _slackWorkspaceController,
-                              decoration: InputDecoration(
-                                labelText: 'Slack Workspace',
-                                hintText: 'Enter the Slack workspace name',
-                                prefixIcon: Icon(Icons.chat),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter a Slack workspace name';
-                                }
-                                return null;
-                              },
-                            ),
-
-                            const SizedBox(height: 16),
+                            // TextFormField(
+                            //   controller: _slackWorkspaceController,
+                            //   decoration: InputDecoration(
+                            //     labelText: 'Slack Workspace',
+                            //     hintText: 'Enter the Slack workspace name',
+                            //     prefixIcon: Icon(Icons.chat),
+                            //     border: OutlineInputBorder(
+                            //       borderRadius: BorderRadius.circular(8),
+                            //     ),
+                            //   ),
+                            //   validator: (value) {
+                            //     if (value == null || value.isEmpty) {
+                            //       return 'Please enter a Slack workspace name';
+                            //     }
+                            //     return null;
+                            //   },
+                            // ),
+                            //
+                            // const SizedBox(height: 16),
 
                             // Slack Bot Token field
                             TextFormField(
