@@ -208,7 +208,7 @@ class KnowledgeService {
     // Remove null values from query parameters
     queryParams.removeWhere((key, value) => value == null);
 
-    final uri = Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/units').replace(
+    final uri = Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/datasources').replace(
       queryParameters: queryParams,
     );
 
@@ -373,9 +373,9 @@ class KnowledgeService {
       throw Exception('Authentication token not found. Please login again.');
     }
 
-    if (userGuid == null) {
-      throw Exception('User GUID not found.');
-    }
+    // if (userGuid == null) {
+    //   throw Exception('User GUID not found.');
+    // }
 
     try {
       // Get the file name from the path
@@ -384,53 +384,101 @@ class KnowledgeService {
 
       print('Uploading file: $fileName with MIME type: $mimeType');
 
-      // Create multipart request
-      final uri = Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/local-file');
-      print('Upload URI: $uri');
+      // STEP 1: Upload file to storage
+      final uploadUri = Uri.parse('$baseUrl/kb-core/v1/knowledge/files');
+      print('Upload URI (Step 1): $uploadUri');
 
-      // Create a multipart request
-      final request = http.MultipartRequest('POST', uri);
+      // Create a multipart request for file upload
+      final uploadRequest = http.MultipartRequest('POST', uploadUri);
 
       // Add headers
-      request.headers['x-jarvis-guid'] = userGuid;
-      request.headers['Authorization'] = 'Bearer $token';
+      uploadRequest.headers['Authorization'] = 'Bearer $token';
 
       // Add file to the request
       final fileBytes = await file.readAsBytes();
       final multipartFile = http.MultipartFile.fromBytes(
-        'file',
+        'files',  // Note: parameter name is 'files' not 'file'
         fileBytes,
         filename: fileName,
         contentType: MediaType.parse(mimeType),
       );
-      request.files.add(multipartFile);
+      uploadRequest.files.add(multipartFile);
 
-      print('Request headers: ${request.headers}');
-      print('File name: $fileName, size: ${fileBytes.length} bytes, MIME type: $mimeType');
+      print('Step 1 - Request headers: ${uploadRequest.headers}');
+      print('Step 1 - File name: $fileName, size: ${fileBytes.length} bytes, MIME type: $mimeType');
 
-      // Send the request
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
+      // Send the upload request
+      final uploadStreamedResponse = await uploadRequest.send();
+      final uploadResponse = await http.Response.fromStream(uploadStreamedResponse);
 
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
+      print('Step 1 - Response status: ${uploadResponse.statusCode}');
+      print('Step 1 - Response body: ${uploadResponse.body}');
 
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return true;
-      } else {
-        if (response.body.isNotEmpty) {
-          try {
-            final errorData = json.decode(response.body);
-            throw Exception(errorData['message'] ?? 'Failed to upload file. Status: ${response.statusCode}');
-          } catch (e) {
-            throw Exception('Failed to upload file. Status: ${response.statusCode}, Body: ${response.body}');
-          }
-        }
-        throw Exception('Failed to upload file. Status: ${response.statusCode}');
+      if (uploadResponse.statusCode < 200 || uploadResponse.statusCode >= 300) {
+        throw Exception('Failed to upload file to storage. Status: ${uploadResponse.statusCode}, Body: ${uploadResponse.body}');
       }
+
+      // Parse the response to get the file ID
+      final uploadResponseData = json.decode(uploadResponse.body);
+      if (uploadResponseData['files'] == null || uploadResponseData['files'].isEmpty) {
+        throw Exception('No file ID returned from upload');
+      }
+
+      final fileId = uploadResponseData['files'][0]['id'];
+      print('Step 1 - File uploaded successfully. File ID: $fileId');
+
+      // STEP 2: Add file to knowledge using the file ID
+      final datasourceUri = Uri.parse('$baseUrl/kb-core/v1/knowledge/$knowledgeId/datasources');
+      print('Datasource URI (Step 2): $datasourceUri');
+
+      // Create request body for adding file to knowledge
+      final datasourceBody = json.encode({
+        'datasources': [
+          {
+            'type': 'local_file',
+            'name': fileName,
+            'credentials': {
+              'file': fileId
+            }
+          }
+        ]
+      });
+
+      // Add headers
+      final datasourceHeaders = {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      };
+
+      print('Step 2 - Request headers: $datasourceHeaders');
+      print('Step 2 - Request body: $datasourceBody');
+
+      // Send the datasource request
+      final datasourceResponse = await http.post(
+        datasourceUri,
+        headers: datasourceHeaders,
+        body: datasourceBody,
+      );
+
+      print('Step 2 - Response status: ${datasourceResponse.statusCode}');
+      print('Step 2 - Response body: ${datasourceResponse.body}');
+
+      if (datasourceResponse.statusCode < 200 || datasourceResponse.statusCode >= 300) {
+        throw Exception('Failed to add file to knowledge. Status: ${datasourceResponse.statusCode}, Body: ${datasourceResponse.body}');
+      }
+
+      // Parse the response to verify success
+      final datasourceResponseData = json.decode(datasourceResponse.body);
+      if (datasourceResponseData['datasources'] == null || datasourceResponseData['datasources'].isEmpty) {
+        throw Exception('No datasource returned from API');
+      }
+
+      print('Step 2 - File added to knowledge successfully. Datasource ID: ${datasourceResponseData['datasources'][0]['id']}');
+
+      return true;
     } catch (e) {
-      print('Error uploading file: $e');
-      throw Exception('Error uploading file: $e');
+      print('Error in uploadFileToKnowledge: $e');
+      throw Exception('Error uploading file to knowledge: $e');
     }
   }
 
