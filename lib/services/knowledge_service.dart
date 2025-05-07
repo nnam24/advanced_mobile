@@ -613,7 +613,7 @@ class KnowledgeService {
     }
   }
 
-  // Add Confluence knowledge to an existing knowledge item
+  // Add Confluence knowledge to an existing knowledge item - UPDATED to use new API
   Future<Map<String, dynamic>> addConfluenceKnowledge(
       String knowledgeId,
       String unitName,
@@ -622,37 +622,39 @@ class KnowledgeService {
       String? confluenceAccessToken
       ) async {
     final token = await _getAuthToken();
-    final userGuid = await _getUserGuid();
 
     if (token == null) {
       throw Exception('Authentication token not found. Please login again.');
     }
 
-    if (userGuid == null) {
-      throw Exception('User GUID not found.');
-    }
+    // Use provided token if available, otherwise use the hardcoded one
+    final accessToken = confluenceAccessToken?.isNotEmpty == true
+        ? confluenceAccessToken
+        : 'ATATT3xFfGF0FY3EffJVyffaRgaP85fgUurfbtJdupe_-YiY8At9j6kxdo9o6E_IiYxbOetHF0XPJ4ratt2PUDp-2A2Wf2JKRGYy0jFl_3b9H5hDb_auDlWty2o_y55jMHdAZnTLVA8Ttc7gK9YN2d9gIdfe3JRguAQLXQPuB1cPGGQEJtpIS-M=0C8B0A22';
 
     final headers = {
-      'x-jarvis-guid': userGuid,
       'Authorization': 'Bearer $token',
       'Content-Type': 'application/json',
     };
 
-    // Use provided token if available, otherwise use the hardcoded one
-    final accessToken = confluenceAccessToken?.isNotEmpty == true
-        ? confluenceAccessToken
-        : 'ATATT3xFfGF0_Vkqx4I1dgD5iql52luGe6bXGX5Ian-N8Tj83rsQuC1c5exdJncxxmhHaGAQfRFUF2com3amuSm5oZNlF57Nh-5eNbMIRT6XeXuUm2U1gtFE8C91_ZGMDscMyNsU6-5OiMZ89PfvCCtbpYhWbgWKon42TqGpJg9wgP64yyNMO6g=EA46C662';
-
+    // Create request body for adding Confluence datasource
     final body = json.encode({
-      'unitName': unitName,
-      'wikiPageUrl': wikiPageUrl,
-      'confluenceUsername': confluenceUsername,
-      'confluenceAccessToken': accessToken,
+      'datasources': [
+        {
+          'type': 'confluence',
+          'name': unitName,
+          'credentials': {
+            'url': wikiPageUrl,
+            'username': confluenceUsername,
+            'token': accessToken
+          }
+        }
+      ]
     });
 
     try {
       print('Adding Confluence knowledge: $unitName, Wiki URL: $wikiPageUrl');
-      final uri = Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/confluence');
+      final uri = Uri.parse('$baseUrl$knowledgeEndpoint/$knowledgeId/datasources');
       print('API endpoint: $uri');
 
       final response = await http.post(
