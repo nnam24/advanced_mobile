@@ -17,6 +17,8 @@ import 'providers/prompt_provider.dart';
 import 'providers/ad_provider.dart'; // Add this import
 import 'services/ai_bot_service.dart';
 import 'services/prompt_service.dart';
+import 'services/prompt_service.dart'; // Added import for PromptService
+import 'services/bot_integration_service.dart'; // Added import for BotIntegrationService
 import 'theme/app_theme.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -49,6 +51,8 @@ void main() async { // Changed to async
   final promptProvider = PromptProvider(promptService: promptService);
   final adProvider = AdProvider(); // Create AdProvider instance
   final subscriptionProvider = SubscriptionProvider();
+  final botIntegrationService =
+      BotIntegrationService(); // Create BotIntegrationService instance
 
   // Run the app with optimized providers
   runApp(
@@ -65,10 +69,12 @@ void main() async { // Changed to async
           previous ?? ChatProvider(subscriptionProvider),
         ),
         ChangeNotifierProvider.value(value: AIBotService()),
-        ChangeNotifierProvider.value(
-            value: promptProvider),
+        ChangeNotifierProvider.value(value: promptProvider),
         ChangeNotifierProvider.value(value: adProvider), // Add AdProvider
         ChangeNotifierProvider(create: (_) => EmailProvider()), // Add this line
+        ChangeNotifierProvider.value(
+            value:
+                botIntegrationService), // Add BotIntegrationService to providers
       ],
       child: const JarvisApp(),
     ),

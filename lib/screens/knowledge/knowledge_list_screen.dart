@@ -43,7 +43,8 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
   }
 
   void _scrollListener() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.8 &&
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent * 0.8 &&
         !_isLoading &&
         _hasMoreItems) {
       _loadMoreItems();
@@ -90,8 +91,7 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
 
       // Also update the AIBotService for consistency
       final aiBotService = Provider.of<AIBotService>(context, listen: false);
-      aiBotService.setKnowledgeItems(_knowledgeItems);
-
+      //aiBotService.setKnowledgeItems(_knowledgeItems);
     } catch (e) {
       setState(() {
         _hasError = true;
@@ -197,12 +197,12 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchController.clear();
-                        _performSearch('');
-                      },
-                    )
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              _performSearch('');
+                            },
+                          )
                         : null,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -247,10 +247,15 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
               // Active filters indicator
               if (_sortOrder != 'DESC' || _sortField != 'createdAt')
                 Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  margin: const EdgeInsets.symmetric(
+                      horizontal: 16.0, vertical: 8.0),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primaryContainer
+                        .withOpacity(0.5),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -283,25 +288,26 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
                   child: _isLoading && _knowledgeItems.isEmpty
                       ? const Center(child: CircularProgressIndicator())
                       : _knowledgeItems.isEmpty
-                      ? _buildEmptyState()
-                      : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _knowledgeItems.length + (_hasMoreItems ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _knowledgeItems.length) {
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(16.0),
-                            child: CircularProgressIndicator(),
-                          ),
-                        );
-                      }
+                          ? _buildEmptyState()
+                          : ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _knowledgeItems.length +
+                                  (_hasMoreItems ? 1 : 0),
+                              itemBuilder: (context, index) {
+                                if (index == _knowledgeItems.length) {
+                                  return const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(16.0),
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                }
 
-                      final item = _knowledgeItems[index];
-                      return _buildKnowledgeItem(context, item);
-                    },
-                  ),
+                                final item = _knowledgeItems[index];
+                                return _buildKnowledgeItem(context, item);
+                              },
+                            ),
                 ),
               ),
             ],
@@ -508,12 +514,14 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
                 : 'Try a different search term or filter',
             style: TextStyle(
               color:
-              Theme.of(context).colorScheme.onBackground.withOpacity(0.7),
+                  Theme.of(context).colorScheme.onBackground.withOpacity(0.7),
             ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
-          if (_searchQuery.isEmpty && _sortOrder == 'DESC' && _sortField == 'createdAt')
+          if (_searchQuery.isEmpty &&
+              _sortOrder == 'DESC' &&
+              _sortField == 'createdAt')
             ElevatedButton.icon(
               onPressed: () async {
                 final result = await Navigator.push(
@@ -531,7 +539,9 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
               icon: const Icon(Icons.add),
               label: const Text('Create Knowledge'),
             ),
-          if (_searchQuery.isNotEmpty || _sortOrder != 'DESC' || _sortField != 'createdAt')
+          if (_searchQuery.isNotEmpty ||
+              _sortOrder != 'DESC' ||
+              _sortField != 'createdAt')
             ElevatedButton.icon(
               onPressed: _resetFilters,
               icon: const Icon(Icons.refresh),
@@ -574,7 +584,7 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor:
-          Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              Theme.of(context).colorScheme.primary.withOpacity(0.1),
           child: Icon(
             fileIcon,
             color: Theme.of(context).colorScheme.primary,
@@ -675,7 +685,8 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       ),
                       SizedBox(width: 16),
@@ -689,7 +700,8 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
 
               try {
                 // Delete knowledge item using the API
-                final success = await _knowledgeService.deleteKnowledgeItem(item.id);
+                final success =
+                    await _knowledgeService.deleteKnowledgeItem(item.id);
 
                 // Update local state
                 setState(() {
@@ -698,8 +710,9 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
                 });
 
                 // Update AIBotService
-                final aiBotService = Provider.of<AIBotService>(context, listen: false);
-                aiBotService.deleteKnowledgeItem(item.id);
+                final aiBotService =
+                    Provider.of<AIBotService>(context, listen: false);
+                //aiBotService.deleteKnowledgeItem(item.id);
 
                 if (mounted) {
                   // Clear any existing snackbars
@@ -723,7 +736,8 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                Text('Knowledge source "${item.title}" has been deleted'),
+                                Text(
+                                    'Knowledge source "${item.title}" has been deleted'),
                               ],
                             ),
                           ),
@@ -824,7 +838,8 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       ),
                       SizedBox(width: 16),
@@ -838,7 +853,8 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
 
               try {
                 // Disable knowledge item using the API (same as delete in this case)
-                final success = await _knowledgeService.disableKnowledgeItem(item.id);
+                final success =
+                    await _knowledgeService.disableKnowledgeItem(item.id);
 
                 // Update local state - remove the item from the list
                 setState(() {
@@ -847,8 +863,9 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
                 });
 
                 // Update AIBotService
-                final aiBotService = Provider.of<AIBotService>(context, listen: false);
-                aiBotService.deleteKnowledgeItem(item.id);
+                final aiBotService =
+                    Provider.of<AIBotService>(context, listen: false);
+                //aiBotService.deleteKnowledgeItem(item.id);
 
                 if (mounted) {
                   // Clear any existing snackbars
@@ -872,7 +889,8 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                Text('Knowledge source "${item.title}" has been disabled'),
+                                Text(
+                                    'Knowledge source "${item.title}" has been disabled'),
                               ],
                             ),
                           ),
@@ -890,7 +908,6 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
                       ),
                     ),
                   );
-
                 }
               } catch (e) {
                 if (mounted) {
@@ -947,4 +964,3 @@ class _KnowledgeListScreenState extends State<KnowledgeListScreen> {
     );
   }
 }
-

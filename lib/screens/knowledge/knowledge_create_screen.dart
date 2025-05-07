@@ -43,7 +43,7 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
 
         // Add to the service for local state management
         final aiBotService = Provider.of<AIBotService>(context, listen: false);
-        aiBotService.addKnowledgeItem(newKnowledge);
+        // aiBotService.addKnowledgeItem(newKnowledge);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -63,7 +63,8 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to create knowledge source: ${e.toString()}'),
+              content:
+                  Text('Failed to create knowledge source: ${e.toString()}'),
               behavior: SnackBarBehavior.floating,
               backgroundColor: Colors.red,
             ),
@@ -89,13 +90,13 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
             onPressed: _isLoading ? null : _createKnowledge,
             child: _isLoading
                 ? const SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
                 : const Text('Create'),
           ),
         ],
@@ -203,21 +204,21 @@ class _KnowledgeCreateScreenState extends State<KnowledgeCreateScreen> {
                       ),
                       child: _isLoading
                           ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                          AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
                           : const Text(
-                        'Create Knowledge Source',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                              'Create Knowledge Source',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
                 ],

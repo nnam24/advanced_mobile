@@ -46,16 +46,14 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
       });
 
       final offset = _currentPage * _pageSize;
-      final units = await _knowledgeService.getKnowledgeUnits(
-          widget.item.id,
-          offset: offset,
-          limit: _pageSize
-      );
+      final units = await _knowledgeService.getKnowledgeUnits(widget.item.id,
+          offset: offset, limit: _pageSize);
 
       // Get total count from the first page
       if (_currentPage == 0 || refresh) {
         // This is a simplification - in a real app, the API should return the total count
-        _totalUnits = units.length >= _pageSize ? units.length + 1 : units.length;
+        _totalUnits =
+            units.length >= _pageSize ? units.length + 1 : units.length;
       }
 
       _hasMoreUnits = units.length >= _pageSize;
@@ -131,10 +129,16 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surface
+                          .withOpacity(0.8),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline
+                            .withOpacity(0.2),
                       ),
                     ),
                     child: Column(
@@ -144,7 +148,10 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                           children: [
                             CircleAvatar(
                               radius: 24,
-                              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withOpacity(0.1),
                               child: Icon(
                                 Icons.folder,
                                 color: Theme.of(context).colorScheme.primary,
@@ -165,7 +172,9 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                                   Text(
                                     'Data Sources: ${_knowledgeUnits.length}',
                                     style: TextStyle(
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
                                     ),
                                   ),
                                 ],
@@ -217,7 +226,10 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                       color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline
+                            .withOpacity(0.2),
                       ),
                     ),
                     child: SelectableText(
@@ -245,14 +257,16 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => KnowledgeUploadScreen(knowledgeItem: widget.item),
+                              builder: (context) => KnowledgeUploadScreen(
+                                  knowledgeItem: widget.item),
                             ),
                           ).then((_) => _loadKnowledgeUnits());
                         },
                         icon: const Icon(Icons.add),
                         label: const Text('Add Source'),
                         style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                           textStyle: const TextStyle(fontSize: 14),
                         ),
                       ),
@@ -347,30 +361,37 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                               color: Theme.of(context).colorScheme.surface,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outline
+                                    .withOpacity(0.2),
                               ),
                             ),
                             child: botNames.isEmpty
                                 ? const Text('Not used by any bots yet')
                                 : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: botNames
-                                  .map((name) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8.0),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.smart_toy,
-                                      size: 16,
-                                      color: Theme.of(context).colorScheme.primary,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(name),
-                                  ],
-                                ),
-                              ))
-                                  .toList(),
-                            ),
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: botNames
+                                        .map((name) => Padding(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 8.0),
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.smart_toy,
+                                                    size: 16,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .primary,
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(name),
+                                                ],
+                                              ),
+                                            ))
+                                        .toList(),
+                                  ),
                           ),
                         ],
                       );
@@ -387,7 +408,8 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => KnowledgeUploadScreen(knowledgeItem: widget.item),
+              builder: (context) =>
+                  KnowledgeUploadScreen(knowledgeItem: widget.item),
             ),
           ).then((_) => _loadKnowledgeUnits());
         },
@@ -428,7 +450,8 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
           Text(
             'Add your first data source to enhance this knowledge base',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onBackground.withOpacity(0.7),
+              color:
+                  Theme.of(context).colorScheme.onBackground.withOpacity(0.7),
             ),
             textAlign: TextAlign.center,
           ),
@@ -438,7 +461,8 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => KnowledgeUploadScreen(knowledgeItem: widget.item),
+                  builder: (context) =>
+                      KnowledgeUploadScreen(knowledgeItem: widget.item),
                 ),
               ).then((_) => _loadKnowledgeUnits());
             },
@@ -483,7 +507,8 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
       ),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+          backgroundColor:
+              Theme.of(context).colorScheme.primary.withOpacity(0.1),
           child: Icon(
             unitIcon,
             color: Theme.of(context).colorScheme.primary,
@@ -670,7 +695,8 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       ),
                       SizedBox(width: 16),
@@ -684,8 +710,9 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
 
               try {
                 // Delete knowledge item
-                final aiBotService = Provider.of<AIBotService>(context, listen: false);
-                await aiBotService.deleteKnowledgeItem(widget.item.id);
+                // final aiBotService =
+                //     Provider.of<AIBotService>(context, listen: false);
+                //await aiBotService.deleteKnowledgeItem(widget.item.id);
 
                 if (mounted) {
                   // Clear any existing snackbars
@@ -699,7 +726,8 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                           Icon(Icons.check_circle, color: Colors.white),
                           SizedBox(width: 16),
                           Expanded(
-                            child: Text('Knowledge source "${widget.item.title}" has been deleted'),
+                            child: Text(
+                                'Knowledge source "${widget.item.title}" has been deleted'),
                           ),
                         ],
                       ),
@@ -771,7 +799,8 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       ),
                       SizedBox(width: 16),
@@ -786,9 +815,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
               try {
                 // Delete the knowledge unit
                 final success = await _knowledgeService.deleteKnowledgeUnit(
-                    widget.item.id,
-                    unit.id
-                );
+                    widget.item.id, unit.id);
 
                 if (success && mounted) {
                   // Clear any existing snackbars
@@ -802,7 +829,8 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                           Icon(Icons.check_circle, color: Colors.white),
                           SizedBox(width: 16),
                           Expanded(
-                            child: Text('Data source "${unit.name}" has been deleted'),
+                            child: Text(
+                                'Data source "${unit.name}" has been deleted'),
                           ),
                         ],
                       ),

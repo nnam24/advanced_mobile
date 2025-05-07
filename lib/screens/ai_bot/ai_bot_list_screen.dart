@@ -16,20 +16,54 @@ class AIBotListScreen extends StatefulWidget {
 class _AIBotListScreenState extends State<AIBotListScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  final ScrollController _scrollController = ScrollController();
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+
+    // Refresh the bot list when the screen is first loaded
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshBots();
+    });
+  }
+
+  Future<void> _refreshBots() async {
+    if (!mounted) return;
+
+    final aiBotService = Provider.of<AIBotService>(context, listen: false);
+    await aiBotService.fetchBots(refresh: true);
+
+    if (mounted) {
+      setState(() {
+        _isInitialized = true;
+      });
+    }
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      // Load more data when we're near the end of the list
+      final aiBotService = Provider.of<AIBotService>(context, listen: false);
+      if (!aiBotService.isLoading && aiBotService.hasMore) {
+        aiBotService.loadMore();
+      }
+    }
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final aiBotService = Provider.of<AIBotService>(context);
-    final filteredBots = _searchQuery.isEmpty
-        ? aiBotService.bots
-        : aiBotService.searchBots(_searchQuery);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('AI Bots'),
@@ -42,7 +76,10 @@ class _AIBotListScreenState extends State<AIBotListScreen> {
                 MaterialPageRoute(
                   builder: (context) => const AIBotCreateScreen(),
                 ),
-              );
+              ).then((_) {
+                // Refresh the list when returning from create screen
+                _refreshBots();
+              });
             },
           ),
         ],
@@ -85,18 +122,48 @@ class _AIBotListScreenState extends State<AIBotListScreen> {
 
               // Bot list
               Expanded(
-                child: aiBotService.isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : filteredBots.isEmpty
-                        ? _buildEmptyState()
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: filteredBots.length,
-                            itemBuilder: (context, index) {
-                              final bot = filteredBots[index];
-                              return _buildBotCard(context, bot);
-                            },
-                          ),
+                child: Consumer<AIBotService>(
+                  builder: (context, aiBotService, child) {
+                    // Show loading indicator if service is loading and we have no bots yet
+                    if ((aiBotService.isLoading && aiBotService.bots.isEmpty) ||
+                        !_isInitialized) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final filteredBots = _searchQuery.isEmpty
+                        ? aiBotService.bots
+                        : aiBotService.searchBots(_searchQuery);
+
+                    if (filteredBots.isEmpty) {
+                      return _buildEmptyState();
+                    }
+
+                    return RefreshIndicator(
+                      onRefresh: _refreshBots,
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filteredBots.length +
+                            (aiBotService.isLoading && aiBotService.hasMore
+                                ? 1
+                                : 0),
+                        itemBuilder: (context, index) {
+                          if (index == filteredBots.length) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: CircularProgressIndicator(),
+                              ),
+                            );
+                          }
+
+                          final bot = filteredBots[index];
+                          return _buildBotCard(context, bot);
+                        },
+                      ),
+                    );
+                  },
+                ),
               ),
             ],
           ),
@@ -109,7 +176,10 @@ class _AIBotListScreenState extends State<AIBotListScreen> {
             MaterialPageRoute(
               builder: (context) => const AIBotCreateScreen(),
             ),
-          );
+          ).then((_) {
+            // Refresh the list when returning from create screen
+            _refreshBots();
+          });
         },
         child: const Icon(Icons.add),
       ),
@@ -155,7 +225,9 @@ class _AIBotListScreenState extends State<AIBotListScreen> {
                   MaterialPageRoute(
                     builder: (context) => const AIBotCreateScreen(),
                   ),
-                );
+                ).then((_) {
+                  _refreshBots();
+                });
               },
               icon: const Icon(Icons.add),
               label: const Text('Create AI Bot'),
@@ -184,7 +256,10 @@ class _AIBotListScreenState extends State<AIBotListScreen> {
             MaterialPageRoute(
               builder: (context) => AIBotDetailScreen(botId: bot.id),
             ),
-          );
+          ).then((_) {
+            // Refresh the list when returning from detail screen
+            _refreshBots();
+          });
         },
         borderRadius: BorderRadius.circular(16),
         child: Padding(
