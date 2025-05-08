@@ -26,6 +26,10 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
   bool _showScrollToBottom = false;
   bool _isFirstMessage = true;
 
+  // For streaming response
+  String _currentResponse = '';
+  String _pendingMessageId = '';
+
   @override
   void initState() {
     super.initState();
@@ -112,36 +116,99 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
     try {
       final aiBotService = Provider.of<AIBotService>(context, listen: false);
 
-      // Use the combined method that handles both first and subsequent messages
-      final response = await aiBotService.sendMessage(widget.bot.id, message);
-
-      if (!mounted) return;
+      // Create a placeholder message for streaming updates
+      final pendingMessageId = DateTime.now().millisecondsSinceEpoch.toString();
       setState(() {
-        _messages.add(response);
-        _isLoading = false;
-        // If this was the first message, now we're in subsequent message mode
-        if (_isFirstMessage) {
-          _isFirstMessage = false;
-        }
+        _pendingMessageId = pendingMessageId;
+        _currentResponse = '';
+        _messages.add(
+          Message(
+            id: pendingMessageId,
+            content: '',
+            type: MessageType.assistant,
+            timestamp: DateTime.now(),
+          ),
+        );
       });
 
-      // Scroll to bottom after receiving response
+      // Use the streaming message method
+      final response = await aiBotService.sendMessage(widget.bot.id, message,
+          onChunkReceived: (chunk) {
+        if (!mounted) return;
+
+        setState(() {
+          _currentResponse += chunk;
+
+          // Update the pending message with the current accumulated response
+          final index =
+              _messages.indexWhere((msg) => msg.id == _pendingMessageId);
+          if (index != -1) {
+            _messages[index] =
+                _messages[index].copyWith(content: _currentResponse);
+          }
+        });
+
+        // Scroll to bottom as new content arrives
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToBottom();
+        });
+      });
+
+      if (!mounted) return;
+
+      // Replace the streaming placeholder with the final message
+      final index = _messages.indexWhere((msg) => msg.id == _pendingMessageId);
+      if (index != -1) {
+        setState(() {
+          _messages[index] = response;
+          _isLoading = false;
+          _pendingMessageId = '';
+          _currentResponse = '';
+
+          // If this was the first message, now we're in subsequent message mode
+          if (_isFirstMessage) {
+            _isFirstMessage = false;
+          }
+        });
+      }
+
+      // Scroll to bottom after receiving full response
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scrollToBottom();
       });
     } catch (e) {
       if (!mounted) return;
+
+      // If there was a pending message being streamed, update it with error
+      if (_pendingMessageId.isNotEmpty) {
+        final index =
+            _messages.indexWhere((msg) => msg.id == _pendingMessageId);
+        if (index != -1) {
+          setState(() {
+            _messages[index] = _messages[index].copyWith(
+              content:
+                  'Sorry, there was an error processing your request: ${e.toString()}',
+            );
+            _pendingMessageId = '';
+            _currentResponse = '';
+          });
+        }
+      } else {
+        setState(() {
+          _messages.add(
+            Message(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              content:
+                  'Sorry, there was an error processing your request: ${e.toString()}',
+              type: MessageType.assistant,
+              timestamp: DateTime.now(),
+            ),
+          );
+        });
+      }
+
       setState(() {
         _isLoading = false;
-        _messages.add(
-          Message(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            content:
-                'Sorry, there was an error processing your request: ${e.toString()}',
-            type: MessageType.assistant,
-            timestamp: DateTime.now(),
-          ),
-        );
       });
 
       // Scroll to bottom to show error message
@@ -290,8 +357,8 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
                     ),
                     const SizedBox(width: 16),
                     Text(
-                      _isFirstMessage
-                          ? 'Creating conversation...'
+                      _pendingMessageId.isNotEmpty
+                          ? 'Typing...'
                           : 'Thinking...',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,

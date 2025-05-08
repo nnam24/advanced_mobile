@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/ai_bot.dart';
@@ -557,6 +558,16 @@ class _AIBotPublishScreenState extends State<AIBotPublishScreen> {
     }
   }
 
+  Future<void> _copyToClipboard(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      UIUtils.showSnackBar(
+        context,
+        message: 'Link copied to clipboard',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final botIntegrationService = Provider.of<BotIntegrationService>(context);
@@ -1053,6 +1064,12 @@ class _AIBotPublishScreenState extends State<AIBotPublishScreen> {
                       ),
                     ),
                   ),
+                ),
+                IconButton(
+                  onPressed: () => _copyToClipboard(url),
+                  icon: const Icon(Icons.copy),
+                  tooltip: 'Copy Link',
+                  color: Theme.of(context).colorScheme.primary,
                 ),
                 IconButton(
                   onPressed: onOpen,
