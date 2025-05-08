@@ -8,10 +8,12 @@ import '../../models/email_model.dart';
 
 class EmailDetailScreen extends StatefulWidget {
   final Function(EmailModel) onEditEmail;
+  final VoidCallback onBackPressed;
 
   const EmailDetailScreen({
     Key? key,
     required this.onEditEmail,
+    required this.onBackPressed,
   }) : super(key: key);
 
   @override
@@ -78,7 +80,7 @@ class _EmailDetailScreenState extends State<EmailDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Lỗi: ${emailProvider.error}'),
+            content: Text('Error: ${emailProvider.error}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -159,10 +161,8 @@ class _EmailDetailScreenState extends State<EmailDetailScreen> {
             elevation: 0,
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
-              onPressed: () {
-                // Đảm bảo quay về email_list_screen
-                Navigator.of(context).pop();
-              },
+              onPressed: widget.onBackPressed,
+              tooltip: 'Back to inbox',
             ),
             actions: [
               IconButton(
@@ -195,7 +195,7 @@ class _EmailDetailScreenState extends State<EmailDetailScreen> {
                   if (confirm == true) {
                     await emailProvider.deleteEmail(email.id);
                     if (mounted) {
-                      Navigator.of(context).pop();
+                      widget.onBackPressed();
                     }
                   }
                 },
@@ -243,7 +243,7 @@ class _EmailDetailScreenState extends State<EmailDetailScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Từ: ${email.sender}',
+                                  'From: ${email.sender}',
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w500,
@@ -252,7 +252,7 @@ class _EmailDetailScreenState extends State<EmailDetailScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Đến: ${email.receiver}',
+                                  'To: ${email.receiver}',
                                   style: TextStyle(
                                     fontSize: 14,
                                     color: colorScheme.onSurface.withOpacity(0.8),

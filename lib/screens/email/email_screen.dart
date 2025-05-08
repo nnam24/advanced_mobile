@@ -35,15 +35,12 @@ class _EmailScreenState extends State<EmailScreen> {
     setState(() {
       _currentIndex = 1; // Chuyển sang tab chi tiết
     });
-    // Sử dụng Navigator.push thay vì pushReplacement để giữ email_list_screen trong stack
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => EmailDetailScreen(
-          onEditEmail: _editEmail,
-        ),
-      ),
-    );
+  }
+
+  void _goBackToList() {
+    setState(() {
+      _currentIndex = 0; // Chuyển về tab danh sách
+    });
   }
 
   void _composeEmail() {
@@ -91,15 +88,20 @@ class _EmailScreenState extends State<EmailScreen> {
               // Tab 1: Chi tiết email
               EmailDetailScreen(
                 onEditEmail: _editEmail,
+                onBackPressed: _goBackToList,
               ),
             ],
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _currentIndex,
             onDestinationSelected: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
+              // Chỉ cho phép chuyển từ chi tiết về danh sách
+              // Không cho phép chuyển từ danh sách sang chi tiết nếu không có email được chọn
+              if (index == 0 || (index == 1 && emailProvider.selectedEmail != null)) {
+                setState(() {
+                  _currentIndex = index;
+                });
+              }
             },
             backgroundColor: colorScheme.surface,
             destinations: [
@@ -111,7 +113,8 @@ class _EmailScreenState extends State<EmailScreen> {
               NavigationDestination(
                 icon: const Icon(Icons.email),
                 label: 'Details',
-                tooltip: 'View email details',                enabled: emailProvider.selectedEmail != null,
+                tooltip: 'View email details',
+                enabled: emailProvider.selectedEmail != null,
               ),
             ],
           ),
@@ -121,7 +124,8 @@ class _EmailScreenState extends State<EmailScreen> {
             backgroundColor: colorScheme.primary,
             foregroundColor: colorScheme.onPrimary,
             child: const Icon(Icons.edit),
-            tooltip: 'Compose New Email',          )
+            tooltip: 'Compose New Email',
+          )
               : null,
         );
       },
