@@ -11,6 +11,7 @@ import '../widgets/animated_background.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_history_drawer.dart';
 import 'ad/earn_tokens_screen.dart';
+import 'email/email_screen.dart';
 import 'profile/profile_screen.dart';
 import 'auth/login_screen.dart';
 import 'ai_bot/ai_bot_list_screen.dart';
@@ -55,11 +56,11 @@ class _HomeScreenState extends State<HomeScreen>
     // Check authentication status
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final subscriptionProvider = Provider.of<SubscriptionProvider>(context, listen: false);
+      final subscriptionProvider =
+          Provider.of<SubscriptionProvider>(context, listen: false);
 
       // Fetch current subscription information
       subscriptionProvider.fetchCurrentSubscription();
-
 
       if (!authProvider.isAuthenticated) {
         Navigator.of(context).pushReplacement(
@@ -795,8 +796,7 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final chatProvider = Provider.of<ChatProvider>(context);
-    final subscriptionProvider =
-        Provider.of<SubscriptionProvider>(context);
+    final subscriptionProvider = Provider.of<SubscriptionProvider>(context);
     final currentConversation = chatProvider.currentConversation;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final mediaQuery = MediaQuery.of(context);
@@ -873,6 +873,11 @@ class _HomeScreenState extends State<HomeScreen>
                 chatProvider.createNewConversation();
               } else if (value == 'clear') {
                 chatProvider.reduceTokenUsage();
+              } else if (value == 'email') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const EmailScreen()),
+                );
               } else if (value == 'logout') {
                 // Show loading indicator
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -944,6 +949,16 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
               const PopupMenuItem(
+                value: 'email',
+                child: Row(
+                  children: [
+                    Icon(Icons.email, size: 20),
+                    SizedBox(width: 8),
+                    Text('Email AI'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
                 value: 'logout',
                 child: Row(
                   children: [
@@ -956,13 +971,13 @@ class _HomeScreenState extends State<HomeScreen>
             ],
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Chat'),
-            Tab(text: 'Email'),
-          ],
-        ),
+        // bottom: TabBar(
+        //   controller: _tabController,
+        //   tabs: const [
+        //     Tab(text: 'Chat'),
+        //     Tab(text: 'Email'),
+        //   ],
+        // ),
       ),
       body: TabBarView(
         controller: _tabController,
@@ -1242,7 +1257,9 @@ class _HomeScreenState extends State<HomeScreen>
                                     controller: _messageController,
                                     focusNode: _messageFocusNode,
                                     decoration: InputDecoration(
-                                      hintText: (chatProvider.hasTokens || subscriptionProvider.hasUnlimitedTokens)
+                                      hintText: (chatProvider.hasTokens ||
+                                              subscriptionProvider
+                                                  .hasUnlimitedTokens)
                                           ? 'Type a message...'
                                           : 'Out of tokens',
                                       hintStyle: const TextStyle(fontSize: 14),
@@ -1283,7 +1300,7 @@ class _HomeScreenState extends State<HomeScreen>
                                 icon: const Icon(Icons.send, size: 20),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
-                                onPressed:(chatProvider.hasTokens ||
+                                onPressed: (chatProvider.hasTokens ||
                                         subscriptionProvider.hasUnlimitedTokens)
                                     ? _sendMessage
                                     : null,
@@ -1300,8 +1317,8 @@ class _HomeScreenState extends State<HomeScreen>
             ),
           ),
 
-          // Email Tab
-          const EmailComposeScreen(),
+          // // Email Tab
+          // const EmailComposeScreen(),
         ],
       ),
     );
@@ -1410,7 +1427,10 @@ class _HomeScreenState extends State<HomeScreen>
             title: const Text('Email Composer'),
             onTap: () {
               Navigator.pop(context);
-              _tabController.animateTo(1);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const EmailScreen()),
+              );
             },
           ),
           ListTile(
