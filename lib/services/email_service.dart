@@ -7,8 +7,9 @@ import '../models/user.dart';
 class EmailService {
   static const String _baseUrl = 'https://api.jarvis.cx/api/v1';
   static const String _baseEmailsStorageKey = 'saved_emails';
-  final String _authToken = 'eyJhbGciOiJFUzI1NiIsImtpZCI6InFsWUdfYXNMRTI0VSJ9.eyJzdWIiOiIyNTk4Yjk3YS02MWU0LTQ0Y2UtYWJjNC0xMjQ5N2RhZjA2Y2MiLCJicmFuY2hJZCI6Im1haW4iLCJpc3MiOiJodHRwczovL2FjY2Vzcy10b2tlbi5qd3Qtc2lnbmF0dXJlLnN0YWNrLWF1dGguY29tIiwiaWF0IjoxNzQzNzg3MzY5LCJhdWQiOiI0NWExZTJmZC03N2VlLTQ4NzItOWZiNy05ODdiOGMxMTk2MzMiLCJleHAiOjE3NTE1NjMzNjl9.oqYM5aMMiuF-Cg9RpcbmvAEw9a3SRpckKr2NyxQ58aMM-yBRzR9y3ogaeMJHzeXtVNtacuFsMd04roDlGGtwKQ';
+  String _authToken = 'eyJhbGciOiJFUzI1NiIsImtpZCI6InFsWUdfYXNMRTI0VSJ9.eyJzdWIiOiIyNTk4Yjk3YS02MWU0LTQ0Y2UtYWJjNC0xMjQ5N2RhZjA2Y2MiLCJicmFuY2hJZCI6Im1haW4iLCJpc3MiOiJodHRwczovL2FjY2Vzcy10b2tlbi5qd3Qtc2lnbmF0dXJlLnN0YWNrLWF1dGguY29tIiwiaWF0IjoxNzQzNzg3MzY5LCJhdWQiOiI0NWExZTJmZC03N2VlLTQ4NzItOWZiNy05ODdiOGMxMTk2MzMiLCJleHAiOjE3NTE1NjMzNjl9.oqYM5aMMiuF-Cg9RpcbmvAEw9a3SRpckKr2NyxQ58aMM-yBRzR9y3ogaeMJHzeXtVNtacuFsMd04roDlGGtwKQ';
   final String _guidHeader = 'baf60c1e-c61b-496d-ad92-f5aeeadf4def';
+  static const String _refreshToken = 'gm0mckpjq44yppng4hc885twccarr721n5j806zaj5t8g';
 
   // Người dùng hiện tại
   final User? _currentUser;
@@ -24,6 +25,77 @@ class EmailService {
     }
     // Nếu không có người dùng, sử dụng khóa mặc định
     return _baseEmailsStorageKey;
+  }
+
+  // Refresh token khi gặp lỗi 401
+  Future<bool> _refreshAuthToken() async {
+    try {
+      print('Refreshing email service token...');
+
+      final response = await http.post(
+        Uri.parse('https://auth-api.jarvis.cx/api/v1/auth/sessions/current/refresh'),
+        headers: {
+          'accept': 'application/json, text/plain, */*',
+          'accept-language': 'vi-VN,vi;q=0.9',
+          'cache-control': 'no-cache',
+          'content-type': 'application/json',
+          'origin': 'https://jarvis.cx',
+          'pragma': 'no-cache',
+          'priority': 'u=1, i',
+          'referer': 'https://jarvis.cx/',
+          'sec-ch-ua': '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+          'sec-ch-ua-mobile': '?1',
+          'sec-ch-ua-platform': '"Android"',
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'same-site',
+          'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36',
+          'x-stack-access-type': 'client',
+          'x-stack-project-id': '45a1e2fd-77ee-4872-9fb7-987b8c119633',
+          'x-stack-publishable-client-key': 'pck_7wjweasxxnfspvr20dvmyd9pjj0p9kp755bxxcm4ae1er',
+          'x-stack-refresh-token': _refreshToken,
+        },
+        body: '{}',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['access_token'] != null) {
+          _authToken = data['access_token'];
+          print('Token refreshed successfully');
+          return true;
+        }
+      }
+
+      print('Failed to refresh token: ${response.statusCode} - ${response.body}');
+      return false;
+    } catch (e) {
+      print('Error refreshing token: $e');
+      return false;
+    }
+  }
+
+  // Thực hiện HTTP request với xử lý lỗi 401
+  Future<http.Response> _executeWithRetry(Future<http.Response> Function() apiCall) async {
+    try {
+      final response = await apiCall();
+
+      // Nếu gặp lỗi 401, thử refresh token và gọi lại API
+      if (response.statusCode == 401) {
+        print('Received 401 error, attempting to refresh token');
+        final refreshSuccess = await _refreshAuthToken();
+
+        if (refreshSuccess) {
+          // Thử gọi lại API với token mới
+          return await apiCall();
+        }
+      }
+
+      return response;
+    } catch (e) {
+      print('Error executing API call: $e');
+      rethrow;
+    }
   }
 
   // Lấy danh sách email từ SharedPreferences
@@ -181,7 +253,7 @@ class EmailService {
     String language = 'vietnamese',
   }) async {
     try {
-      final response = await http.post(
+      final apiCall = () => http.post(
         Uri.parse('$_baseUrl/ai-email/reply-ideas'),
         headers: {
           'Content-Type': 'application/json',
@@ -200,6 +272,8 @@ class EmailService {
           }
         }),
       );
+
+      final response = await _executeWithRetry(apiCall);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -223,7 +297,7 @@ class EmailService {
     String language = 'vietnamese',
   }) async {
     try {
-      final response = await http.post(
+      final apiCall = () => http.post(
         Uri.parse('$_baseUrl/ai-email'),
         headers: {
           'Content-Type': 'application/json',
@@ -264,6 +338,8 @@ class EmailService {
           ]
         }),
       );
+
+      final response = await _executeWithRetry(apiCall);
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
