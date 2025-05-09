@@ -5,6 +5,8 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/animated_background.dart';
 import '../home_screen.dart';
 import 'login_screen.dart';
+import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -13,7 +15,8 @@ class RegisterScreen extends StatefulWidget {
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProviderStateMixin {
+class _RegisterScreenState extends State<RegisterScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -76,6 +79,18 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
     });
   }
 
+  Future<void> _launchURL() async {
+    final Uri url = Uri.parse(
+        'https://privacyterms.io/view/c11HWAYZ-SCcv2SSV-zf8AP1/?fbclid=IwY2xjawKK9VBleHRuA2FlbQIxMABicmlkETFocGJlTzVFSmRmTTVLYkNWAR7Bx2-TZrGdEfBehi70pZPwwE7Pa1SL3aJkjhBa23Gr5JDaI5uTOkZs1lxcpA_aem_pU1wDNwuSRsmf6lWu4k7sQ');
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the link')),
+        );
+      }
+    }
+  }
+
   Future<void> _register() async {
     if (_formKey.currentState!.validate() && _agreeToTerms) {
       HapticFeedback.lightImpact();
@@ -98,7 +113,8 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
         // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(authProvider.error ?? 'Registration failed. Please try again.'),
+            content: Text(
+                authProvider.error ?? 'Registration failed. Please try again.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -157,7 +173,10 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                             'Sign up to get started with Jarvis AI',
                             style: TextStyle(
                               fontSize: 16,
-                              color: Theme.of(context).colorScheme.onBackground.withOpacity(0.7),
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onBackground
+                                  .withOpacity(0.7),
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -180,7 +199,8 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     hintText: 'Enter your full name',
                                     prefixIcon: Icon(
                                       Icons.person_outline,
-                                      color: Theme.of(context).colorScheme.primary,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
                                     ),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
@@ -205,7 +225,8 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     hintText: 'Enter your email',
                                     prefixIcon: Icon(
                                       Icons.email_outlined,
-                                      color: Theme.of(context).colorScheme.primary,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
                                     ),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
@@ -215,7 +236,9 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     if (value == null || value.isEmpty) {
                                       return 'Please enter your email';
                                     }
-                                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                                    if (!RegExp(
+                                            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                                        .hasMatch(value)) {
                                       return 'Please enter a valid email';
                                     }
                                     return null;
@@ -233,14 +256,17 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     hintText: 'Create a password',
                                     prefixIcon: Icon(
                                       Icons.lock_outline,
-                                      color: Theme.of(context).colorScheme.primary,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
                                     ),
                                     suffixIcon: IconButton(
                                       icon: Icon(
                                         _isPasswordVisible
                                             ? Icons.visibility_off_outlined
                                             : Icons.visibility_outlined,
-                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
                                       ),
                                       onPressed: _togglePasswordVisibility,
                                     ),
@@ -270,16 +296,20 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     hintText: 'Confirm your password',
                                     prefixIcon: Icon(
                                       Icons.lock_outline,
-                                      color: Theme.of(context).colorScheme.primary,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
                                     ),
                                     suffixIcon: IconButton(
                                       icon: Icon(
                                         _isConfirmPasswordVisible
                                             ? Icons.visibility_off_outlined
                                             : Icons.visibility_outlined,
-                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
                                       ),
-                                      onPressed: _toggleConfirmPasswordVisibility,
+                                      onPressed:
+                                          _toggleConfirmPasswordVisibility,
                                     ),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
@@ -317,24 +347,32 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                             TextSpan(
                                               text: 'Terms of Service',
                                               style: TextStyle(
-                                                color: Theme.of(context).colorScheme.primary,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary,
                                                 fontWeight: FontWeight.bold,
                                               ),
-                                              recognizer: null, // Add GestureRecognizer in a real app
+                                              recognizer: TapGestureRecognizer()
+                                                ..onTap = _launchURL,
                                             ),
                                             const TextSpan(text: ' and '),
                                             TextSpan(
                                               text: 'Privacy Policy',
                                               style: TextStyle(
-                                                color: Theme.of(context).colorScheme.primary,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary,
                                                 fontWeight: FontWeight.bold,
                                               ),
-                                              recognizer: null, // Add GestureRecognizer in a real app
+                                              recognizer: TapGestureRecognizer()
+                                                ..onTap = _launchURL,
                                             ),
                                           ],
                                         ),
                                         style: TextStyle(
-                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
                                         ),
                                       ),
                                     ),
@@ -345,29 +383,33 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
 
                                 // Register Button
                                 ElevatedButton(
-                                  onPressed: authProvider.isLoading ? null : _register,
+                                  onPressed:
+                                      authProvider.isLoading ? null : _register,
                                   style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 16),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
                                   child: authProvider.isLoading
                                       ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                    ),
-                                  )
+                                          height: 20,
+                                          width: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                    Colors.white),
+                                          ),
+                                        )
                                       : const Text(
-                                    'Create Account',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                                          'Create Account',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                 ),
 
                                 const SizedBox(height: 24),
@@ -379,7 +421,9 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     Text(
                                       'Already have an account?',
                                       style: TextStyle(
-                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
                                       ),
                                     ),
                                     TextButton(
@@ -387,7 +431,8 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                         Navigator.pushReplacement(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (context) => const LoginScreen(),
+                                            builder: (context) =>
+                                                const LoginScreen(),
                                           ),
                                         );
                                       },
@@ -395,7 +440,9 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                         'Login',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
-                                          color: Theme.of(context).colorScheme.primary,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
                                         ),
                                       ),
                                     ),
@@ -417,4 +464,3 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
     );
   }
 }
-
