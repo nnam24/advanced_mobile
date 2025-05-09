@@ -31,7 +31,7 @@ class SubscriptionService {
       final response = await http.get(
         Uri.parse('$baseUrl/subscriptions/me'),
         headers: headers,
-      );
+      ).timeout(const Duration(seconds: 10)); // Thêm timeout
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final responseData = json.decode(response.body);
@@ -67,38 +67,37 @@ class SubscriptionService {
           endAt: subscriptionInfo.endAt,
           trial: subscriptionInfo.trial,
         );
+      } else if (response.statusCode == 401) {
+        // Specific handling for unauthorized
+        throw Exception('Unauthorized. Please login again.');
       } else {
+        print('API error: ${response.statusCode} - ${response.body}');
         // If API fails, return a basic plan as default
-        return SubscriptionInfo(
-          name: 'basic',
-          dailyTokens: 50,
-          monthlyTokens: 0,
-          annuallyTokens: 0,
-          price: 0,
-          billingPeriod: 'free',
-          startAt: DateTime.now(),
-          endAt: DateTime.now().add(const Duration(days: 365)),
-          trial: false,
-        );
+        return _getDefaultSubscription();
       }
     } catch (e) {
       print('Error fetching subscription info: $e');
       // Return a basic plan as default in case of error
-      return SubscriptionInfo(
-        name: 'basic',
-        dailyTokens: 50,
-        monthlyTokens: 0,
-        annuallyTokens: 0,
-        price: 0,
-        billingPeriod: 'free',
-        startAt: DateTime.now(),
-        endAt: DateTime.now().add(const Duration(days: 365)),
-        trial: false,
-      );
+      return _getDefaultSubscription();
     }
   }
 
-  // Get token usage
+// Thêm phương thức mới để tạo subscription mặc định
+  SubscriptionInfo _getDefaultSubscription() {
+    return SubscriptionInfo(
+      name: 'basic',
+      dailyTokens: 50,
+      monthlyTokens: 0,
+      annuallyTokens: 0,
+      price: 0,
+      billingPeriod: 'free',
+      startAt: DateTime.now(),
+      endAt: DateTime.now().add(const Duration(days: 365)),
+      trial: false,
+    );
+  }
+
+// Get token usage
   Future<TokenUsage> getTokenUsage() async {
     final token = await _getAuthToken();
 
@@ -116,12 +115,16 @@ class SubscriptionService {
       final response = await http.get(
         Uri.parse('$baseUrl/tokens/usage'),
         headers: headers,
-      );
+      ).timeout(const Duration(seconds: 10)); // Thêm timeout
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final responseData = json.decode(response.body);
         return TokenUsage.fromJson(responseData);
+      } else if (response.statusCode == 401) {
+        // Specific handling for unauthorized
+        throw Exception('Unauthorized. Please login again.');
       } else {
+        print('API error: ${response.statusCode} - ${response.body}');
         // If API fails, return empty usage
         return TokenUsage.empty();
       }

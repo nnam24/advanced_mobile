@@ -22,7 +22,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     // Fetch subscription data when screen loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<SubscriptionProvider>(context, listen: false).fetchCurrentSubscription();
+      _fetchSubscriptionData();
       FocusScope.of(context).requestFocus(_focusNode);
     });
   }
@@ -30,8 +30,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Fetch subscription data when screen becomes visible
-    Provider.of<SubscriptionProvider>(context, listen: false).fetchCurrentSubscription();
+    // Chỉ gọi API khi màn hình được tạo lần đầu, không gọi mỗi khi dependencies thay đổi
+    // Việc này sẽ tránh gọi API liên tục
+  }
+
+  // Thêm phương thức mới để gọi API và xử lý lỗi
+  Future<void> _fetchSubscriptionData() async {
+    try {
+      await Provider.of<SubscriptionProvider>(context, listen: false).fetchCurrentSubscription();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load subscription data: ${e.toString()}'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -56,9 +72,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           elevation: 0,
         ),
         body: RefreshIndicator(
-          onRefresh: () async {
-            await Provider.of<SubscriptionProvider>(context, listen: false).fetchCurrentSubscription();
-          },
+          onRefresh: _fetchSubscriptionData,
           child: Stack(
             children: [
               const AnimatedBackground(),
