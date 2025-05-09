@@ -647,11 +647,8 @@ class AIBotService extends ChangeNotifier {
                 }
               }
 
-              // Notify progress if callback is provided
-              if (onChunkReceived != null) {
-                onChunkReceived(chunk);
-              }
-
+              // We're not using the streaming callback anymore
+              // Just accumulate the full content
               print('Received chunk: "$chunk"');
             } catch (e) {
               print('Error parsing SSE data: $e');
@@ -700,11 +697,13 @@ class AIBotService extends ChangeNotifier {
       print('Thread ID for bot $botId: $existingThreadId');
       print('Conversation ID for bot $botId: $existingConversationId');
 
-      // Always use the askAssistant method directly with streaming
-      return await askAssistant(botId, message,
-          threadId: existingThreadId,
-          conversationId: existingConversationId,
-          onChunkReceived: onChunkReceived);
+      // Get the full response at once
+      return await askAssistant(
+        botId,
+        message,
+        threadId: existingThreadId,
+        conversationId: existingConversationId,
+      );
     } catch (e) {
       _error = e.toString();
       print('Exception in sendMessage: $_error');
@@ -854,7 +853,7 @@ class AIBotService extends ChangeNotifier {
 
       final response = await http.post(uri, headers: headers);
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 204) {
         // Update local bot data
         final index = _bots.indexWhere((b) => b.id == botId);
         if (index != -1) {
@@ -906,7 +905,7 @@ class AIBotService extends ChangeNotifier {
 
       final response = await http.delete(uri, headers: headers);
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 204) {
         // Update local bot data
         final index = _bots.indexWhere((b) => b.id == botId);
         if (index != -1) {
