@@ -4,21 +4,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
   // Base URL for auth API
-  static const String authApiBaseUrl =
-      'https://auth-api.dev.jarvis.cx/api/v1/auth';
+  static const String authApiBaseUrl = 'https://auth-api.dev.jarvis.cx/api/v1/auth';
 
   // Common headers for all requests
   static Map<String, String> get baseHeaders => {
-        'X-Stack-Access-Type': 'client',
-        'X-Stack-Project-Id': 'a914f06b-5e46-4966-8693-80e4b9f4f409',
-        'X-Stack-Publishable-Client-Key':
-            'pck_tqsy29b64a585km2g4wnpc57ypjprzzdch8xzpq0xhayr',
-        'Content-Type': 'application/json',
-      };
+    'X-Stack-Access-Type': 'client',
+    'X-Stack-Project-Id': 'a914f06b-5e46-4966-8693-80e4b9f4f409',
+    'X-Stack-Publishable-Client-Key': 'pck_tqsy29b64a585km2g4wnpc57ypjprzzdch8xzpq0xhayr',
+    'Content-Type': 'application/json',
+  };
 
   // Default verification callback URL
-  static const String defaultCallbackUrl =
-      'https://auth.dev.jarvis.cx/handler/email-verification?after_auth_return_to=%2Fauth%2Fsignin%3Fclient_id%3Djarvis_chat%26redirect%3Dhttps%253A%252F%252Fchat.dev.jarvis.cx%252Fauth%252Foauth%252Fsuccess';
+  static const String defaultCallbackUrl = 'https://auth.dev.jarvis.cx/handler/email-verification?after_auth_return_to=%2Fauth%2Fsignin%3Fclient_id%3Djarvis_chat%26redirect%3Dhttps%253A%252F%252Fchat.dev.jarvis.cx%252Fauth%252Foauth%252Fsuccess';
 
   // Sign in with email and password
   Future<Map<String, dynamic>> signIn(String email, String password) async {
@@ -46,8 +43,7 @@ class AuthService {
   }
 
   // Sign up with email and password
-  Future<Map<String, dynamic>> signUp(String email, String password,
-      {String? verificationCallbackUrl}) async {
+  Future<Map<String, dynamic>> signUp(String email, String password, {String? verificationCallbackUrl}) async {
     try {
       final response = await http.post(
         Uri.parse('$authApiBaseUrl/password/sign-up'),
@@ -55,8 +51,7 @@ class AuthService {
         body: jsonEncode({
           'email': email,
           'password': password,
-          'verification_callback_url':
-              verificationCallbackUrl ?? defaultCallbackUrl,
+          'verification_callback_url': verificationCallbackUrl ?? defaultCallbackUrl,
         }),
       );
 
@@ -72,8 +67,16 @@ class AuthService {
   }
 
   // Refresh the authentication token
-  Future<Map<String, dynamic>> refreshToken(String refreshToken) async {
+  Future<bool> refreshToken() async {
     try {
+      final tokens = await getStoredAuthTokens();
+      final refreshToken = tokens['refreshToken'];
+
+      if (refreshToken == null) {
+        print('No refresh token available');
+        return false;
+      }
+
       final headers = Map<String, String>.from(baseHeaders);
       headers['X-Stack-Refresh-Token'] = refreshToken;
 
@@ -83,21 +86,37 @@ class AuthService {
       );
 
       if (response.statusCode != 200) {
-        throw Exception('Token refresh failed: ${response.statusCode}');
+        print('Token refresh failed: ${response.statusCode}');
+        return false;
       }
 
       final data = jsonDecode(response.body);
       await _storeAuthTokens(data);
-      return data;
+      return true;
     } catch (error) {
       print('Refresh token error: $error');
-      rethrow;
+      return false;
     }
   }
 
+  // Get access token
+  Future<String?> getAccessToken() async {
+    final tokens = await getStoredAuthTokens();
+    return tokens['accessToken'];
+  }
+
   // Logout the current user
-  Future<void> logout(String refreshToken, String accessToken) async {
+  Future<void> logout() async {
     try {
+      final tokens = await getStoredAuthTokens();
+      final refreshToken = tokens['refreshToken'];
+      final accessToken = tokens['accessToken'];
+
+      if (refreshToken == null || accessToken == null) {
+        print('No tokens available for logout');
+        return;
+      }
+
       final headers = Map<String, String>.from(baseHeaders);
       headers['X-Stack-Refresh-Token'] = refreshToken;
       headers['Authorization'] = 'Bearer $accessToken';
@@ -108,13 +127,14 @@ class AuthService {
       );
 
       if (response.statusCode != 200) {
-        throw Exception('Logout failed: ${response.statusCode}');
+        print('Logout failed: ${response.statusCode}');
       }
 
       await _clearAuthTokens();
     } catch (error) {
       print('Logout error: $error');
-      rethrow;
+      // Still clear tokens locally even if API call fails
+      await _clearAuthTokens();
     }
   }
 

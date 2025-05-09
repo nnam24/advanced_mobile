@@ -1,283 +1,334 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/subscription_provider.dart';
 import '../../widgets/animated_background.dart';
 import '../auth/login_screen.dart';
 import '../subscription/subscription_screen.dart';
 import 'edit_profile_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    // Fetch subscription data when screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<SubscriptionProvider>(context, listen: false).fetchCurrentSubscription();
+      FocusScope.of(context).requestFocus(_focusNode);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Fetch subscription data when screen becomes visible
+    Provider.of<SubscriptionProvider>(context, listen: false).fetchCurrentSubscription();
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
+    final subscriptionProvider = Provider.of<SubscriptionProvider>(context);
     final user = authProvider.currentUser;
+    final subscription = subscriptionProvider.currentSubscription;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      body: Stack(
-        children: [
-          const AnimatedBackground(),
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Profile Header
-                  Center(
-                    child: Column(
-                      children: [
-                        CircleAvatar(
-                          radius: 50,
-                          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                          child: user?.photoUrl != null && user!.photoUrl.isNotEmpty
-                              ? ClipRRect(
-                            borderRadius: BorderRadius.circular(50),
-                            child: Image.network(
-                              user.photoUrl,
-                              width: 100,
-                              height: 100,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Icon(
-                                  Icons.person,
-                                  size: 50,
-                                  color: Theme.of(context).colorScheme.primary,
-                                );
-                              },
+    return Focus(
+      focusNode: _focusNode,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Profile'),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+        ),
+        body: RefreshIndicator(
+          onRefresh: () async {
+            await Provider.of<SubscriptionProvider>(context, listen: false).fetchCurrentSubscription();
+          },
+          child: Stack(
+            children: [
+              const AnimatedBackground(),
+              SafeArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Profile Header
+                      Center(
+                        child: Column(
+                          children: [
+                            CircleAvatar(
+                              radius: 50,
+                              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                              child: user?.photoUrl != null && user!.photoUrl.isNotEmpty
+                                  ? ClipRRect(
+                                borderRadius: BorderRadius.circular(50),
+                                child: Image.network(
+                                  user.photoUrl,
+                                  width: 100,
+                                  height: 100,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Icon(
+                                      Icons.person,
+                                      size: 50,
+                                      color: Theme.of(context).colorScheme.primary,
+                                    );
+                                  },
+                                ),
+                              )
+                                  : Icon(
+                                Icons.person,
+                                size: 50,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              user?.name ?? 'User',
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              user?.email ?? 'email@example.com',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: subscriptionProvider.isLoading
+                                    ? Colors.grey.withOpacity(0.2)
+                                    : _getPlanColor(subscription?.name ?? 'basic').withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: subscriptionProvider.isLoading
+                                  ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                                  : Text(
+                                _getPlanName(subscription?.name ?? 'basic'),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: _getPlanColor(subscription?.name ?? 'basic'),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      // Account Section
+                      _buildSectionHeader(context, 'Account'),
+                      const SizedBox(height: 8),
+                      _buildProfileCard(
+                        context,
+                        [
+                          _buildProfileItem(
+                            context,
+                            Icons.edit,
+                            'Edit Profile',
+                            'Update your personal information',
+                                () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const EditProfileScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          const Divider(),
+                          _buildProfileItem(
+                            context,
+                            Icons.token,
+                            'Token Balance',
+                            '${user?.tokenBalance ?? 0} tokens available',
+                                () {
+                              // Show token details
+                            },
+                          ),
+                          const Divider(),
+                          _buildProfileItem(
+                            context,
+                            Icons.upgrade,
+                            'Upgrade Plan',
+                            'Current plan: ${subscriptionProvider.isLoading ? 'Loading...' : _getPlanName(subscription?.name ?? 'basic')}',
+                                () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const SubscriptionScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Preferences Section
+                      _buildSectionHeader(context, 'Preferences'),
+                      const SizedBox(height: 8),
+                      _buildProfileCard(
+                        context,
+                        [
+                          _buildProfileItem(
+                            context,
+                            Icons.dark_mode,
+                            'Theme',
+                            'Dark mode / Light mode',
+                                () {
+                              // Toggle theme
+                            },
+                          ),
+                          const Divider(),
+                          _buildProfileItem(
+                            context,
+                            Icons.notifications,
+                            'Notifications',
+                            'Manage notification settings',
+                                () {
+                              // Notification settings
+                            },
+                          ),
+                          const Divider(),
+                          _buildProfileItem(
+                            context,
+                            Icons.language,
+                            'Language',
+                            'English (US)',
+                                () {
+                              // Language settings
+                            },
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Support Section
+                      _buildSectionHeader(context, 'Support'),
+                      const SizedBox(height: 8),
+                      _buildProfileCard(
+                        context,
+                        [
+                          _buildProfileItem(
+                            context,
+                            Icons.help_outline,
+                            'Help Center',
+                            'Get help with using the app',
+                                () {
+                              // Help center
+                            },
+                          ),
+                          const Divider(),
+                          _buildProfileItem(
+                            context,
+                            Icons.privacy_tip_outlined,
+                            'Privacy Policy',
+                            'Read our privacy policy',
+                                () {
+                              // Privacy policy
+                            },
+                          ),
+                          const Divider(),
+                          _buildProfileItem(
+                            context,
+                            Icons.description_outlined,
+                            'Terms of Service',
+                            'Read our terms of service',
+                                () {
+                              // Terms of service
+                            },
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Logout Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: authProvider.isLoading
+                              ? null
+                              : () {
+                            _showLogoutConfirmation(context, authProvider);
+                          },
+                          icon: authProvider.isLoading
+                              ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
-                              : Icon(
-                            Icons.person,
-                            size: 50,
-                            color: Theme.of(context).colorScheme.primary,
+                              : const Icon(Icons.logout),
+                          label: Text(authProvider.isLoading ? 'Logging out...' : 'Logout'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            disabledBackgroundColor: Colors.red.withOpacity(0.6),
+                            disabledForegroundColor: Colors.white.withOpacity(0.8),
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          user?.name ?? 'User',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          user?.email ?? 'email@example.com',
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // App Version
+                      Center(
+                        child: Text(
+                          'Jarvis AI v1.0.0',
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: 12,
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _getPlanColor(user?.plan ?? 'free').withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            _getPlanName(user?.plan ?? 'free'),
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: _getPlanColor(user?.plan ?? 'free'),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                      ),
 
-                  const SizedBox(height: 32),
-
-                  // Account Section
-                  _buildSectionHeader(context, 'Account'),
-                  const SizedBox(height: 8),
-                  _buildProfileCard(
-                    context,
-                    [
-                      _buildProfileItem(
-                        context,
-                        Icons.edit,
-                        'Edit Profile',
-                        'Update your personal information',
-                            () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const EditProfileScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      const Divider(),
-                      _buildProfileItem(
-                        context,
-                        Icons.token,
-                        'Token Balance',
-                        '${user?.tokenBalance ?? 0} tokens available',
-                            () {
-                          // Show token details
-                        },
-                      ),
-                      const Divider(),
-                      _buildProfileItem(
-                        context,
-                        Icons.upgrade,
-                        'Upgrade Plan',
-                        'Current plan: ${_getPlanName(user?.plan ?? 'free')}',
-                            () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SubscriptionScreen(),
-                            ),
-                          );
-                        },
-                      ),
+                      const SizedBox(height: 16),
                     ],
                   ),
-
-                  const SizedBox(height: 24),
-
-                  // Preferences Section
-                  _buildSectionHeader(context, 'Preferences'),
-                  const SizedBox(height: 8),
-                  _buildProfileCard(
-                    context,
-                    [
-                      _buildProfileItem(
-                        context,
-                        Icons.dark_mode,
-                        'Theme',
-                        'Dark mode / Light mode',
-                            () {
-                          // Toggle theme
-                        },
-                      ),
-                      const Divider(),
-                      _buildProfileItem(
-                        context,
-                        Icons.notifications,
-                        'Notifications',
-                        'Manage notification settings',
-                            () {
-                          // Notification settings
-                        },
-                      ),
-                      const Divider(),
-                      _buildProfileItem(
-                        context,
-                        Icons.language,
-                        'Language',
-                        'English (US)',
-                            () {
-                          // Language settings
-                        },
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Support Section
-                  _buildSectionHeader(context, 'Support'),
-                  const SizedBox(height: 8),
-                  _buildProfileCard(
-                    context,
-                    [
-                      _buildProfileItem(
-                        context,
-                        Icons.help_outline,
-                        'Help Center',
-                        'Get help with using the app',
-                            () {
-                          // Help center
-                        },
-                      ),
-                      const Divider(),
-                      _buildProfileItem(
-                        context,
-                        Icons.privacy_tip_outlined,
-                        'Privacy Policy',
-                        'Read our privacy policy',
-                            () {
-                          // Privacy policy
-                        },
-                      ),
-                      const Divider(),
-                      _buildProfileItem(
-                        context,
-                        Icons.description_outlined,
-                        'Terms of Service',
-                        'Read our terms of service',
-                            () {
-                          // Terms of service
-                        },
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Logout Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: authProvider.isLoading
-                          ? null
-                          : () {
-                        _showLogoutConfirmation(context, authProvider);
-                      },
-                      icon: authProvider.isLoading
-                          ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                          : const Icon(Icons.logout),
-                      label: Text(authProvider.isLoading ? 'Logging out...' : 'Logout'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        disabledBackgroundColor: Colors.red.withOpacity(0.6),
-                        disabledForegroundColor: Colors.white.withOpacity(0.8),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // App Version
-                  Center(
-                    child: Text(
-                      'Jarvis AI v1.0.0',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -449,11 +500,11 @@ class ProfileScreen extends StatelessWidget {
 
   Color _getPlanColor(String planId) {
     switch (planId) {
-      case 'free':
+      case 'basic':
         return Colors.grey;
-      case 'premium':
+      case 'starter':
         return Colors.blue;
-      case 'enterprise':
+      case 'pro':
         return Colors.purple;
       default:
         return Colors.grey;
@@ -462,15 +513,14 @@ class ProfileScreen extends StatelessWidget {
 
   String _getPlanName(String planId) {
     switch (planId) {
-      case 'free':
+      case 'basic':
         return 'Free Plan';
-      case 'premium':
-        return 'Premium Plan';
-      case 'enterprise':
-        return 'Enterprise Plan';
+      case 'starter':
+        return 'Starter Plan';
+      case 'pro':
+        return 'Pro Plan';
       default:
         return 'Unknown Plan';
     }
   }
 }
-

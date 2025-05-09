@@ -24,6 +24,18 @@ class _EmailDetailScreenState extends State<EmailDetailScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _showActions = true;
   bool _showGeneratedResponse = false;
+  String _selectedLanguage = 'vietnamese'; // Default language
+
+  final List<Map<String, String>> _availableLanguages = [
+    {'code': 'vietnamese', 'name': 'Vietnamese'},
+    {'code': 'english', 'name': 'English'},
+    {'code': 'french', 'name': 'French'},
+    {'code': 'german', 'name': 'German'},
+    {'code': 'spanish', 'name': 'Spanish'},
+    {'code': 'chinese', 'name': 'Chinese'},
+    {'code': 'japanese', 'name': 'Japanese'},
+    {'code': 'korean', 'name': 'Korean'},
+  ];
 
   @override
   void dispose() {
@@ -59,7 +71,10 @@ class _EmailDetailScreenState extends State<EmailDetailScreen> {
         actionText = 'Write a comprehensive response email';
     }
 
-    await emailProvider.generateEmailWithAction(action: actionText);
+    await emailProvider.generateEmailWithAction(
+      action: actionText,
+      language: _selectedLanguage,
+    );
 
     if (emailProvider.error.isEmpty && emailProvider.generatedResponse.isNotEmpty) {
       setState(() {
@@ -126,6 +141,65 @@ class _EmailDetailScreenState extends State<EmailDetailScreen> {
         );
       }
     }
+  }
+
+  void _showLanguageSelector() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Select Language',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _availableLanguages.length,
+                  itemBuilder: (context, index) {
+                    final language = _availableLanguages[index];
+                    final isSelected = language['code'] == _selectedLanguage;
+
+                    return ListTile(
+                      title: Text(language['name']!),
+                      trailing: isSelected ? const Icon(Icons.check, color: Colors.green) : null,
+                      onTap: () {
+                        setState(() {
+                          _selectedLanguage = language['code']!;
+                        });
+                        Navigator.of(context).pop();
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -368,13 +442,34 @@ class _EmailDetailScreenState extends State<EmailDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Email AI Actions',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: colorScheme.primary,
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              'Email AI Actions',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                            const Spacer(),
+                            // Language selector button
+                            OutlinedButton.icon(
+                              icon: const Icon(Icons.language, size: 16),
+                              label: Text(
+                                _availableLanguages
+                                    .firstWhere((lang) => lang['code'] == _selectedLanguage)['name']!,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              onPressed: _showLanguageSelector,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: colorScheme.primary,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 12),
                         SingleChildScrollView(

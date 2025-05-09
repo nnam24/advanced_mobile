@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import '../models/email_model.dart';
+import '../models/user.dart';
 import '../services/email_service.dart';
+import '../services/auth_service.dart';
 
 class EmailProvider extends ChangeNotifier {
-  final EmailService _emailService = EmailService();
+  final User? _currentUser;
+  final AuthService _authService;
+  late final EmailService _emailService;
 
   List<EmailModel> _emails = [];
   EmailModel? _selectedEmail;
@@ -14,6 +18,16 @@ class EmailProvider extends ChangeNotifier {
   bool _isGenerating = false;
   String _error = '';
   int _remainingUsage = 50; // Default value
+
+  // Constructor nhận thông tin người dùng hiện tại và AuthService
+  EmailProvider({User? currentUser, AuthService? authService})
+      : _currentUser = currentUser,
+        _authService = authService ?? AuthService() {
+    _emailService = EmailService(
+      currentUser: _currentUser,
+      authService: _authService,
+    );
+  }
 
   List<EmailModel> get emails => _emails;
   EmailModel? get selectedEmail => _selectedEmail;
@@ -114,6 +128,28 @@ class EmailProvider extends ChangeNotifier {
         if (_selectedEmail != null && _selectedEmail!.id == emailId) {
           _selectedEmail = null;
         }
+      }
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Xóa tất cả email
+  Future<void> deleteAllEmails() async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final success = await _emailService.deleteAllEmails();
+
+      if (success) {
+        _emails = [];
+        _selectedEmail = null;
       }
 
       _isLoading = false;
