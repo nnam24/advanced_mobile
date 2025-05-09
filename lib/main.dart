@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart'; // Add this import
+import 'package:flutter/foundation.dart';
 
 import 'models/conversation.dart';
 import 'models/user.dart';
@@ -25,12 +26,15 @@ import 'screens/home_screen.dart';
 import 'utils/memory_management.dart';
 
 // Optimize the main function to improve app startup performance
-void main() async { // Changed to async
+void main() async {
+  // Changed to async
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Google Mobile Ads SDK
-  await MobileAds.instance.initialize();
+  if (!kIsWeb) {
+    await MobileAds.instance.initialize();
+  }
 
   // Set system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(
@@ -66,7 +70,7 @@ void main() async { // Changed to async
         ChangeNotifierProxyProvider<SubscriptionProvider, ChatProvider>(
           create: (context) => ChatProvider(subscriptionProvider),
           update: (context, subscriptionProvider, previous) =>
-          previous ?? ChatProvider(subscriptionProvider),
+              previous ?? ChatProvider(subscriptionProvider),
         ),
         ChangeNotifierProvider.value(value: AIBotService()),
         ChangeNotifierProvider.value(value: promptProvider),
