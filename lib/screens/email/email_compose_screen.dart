@@ -1,3 +1,5 @@
+// Cập nhật màn hình soạn email để thêm tùy chọn lưu bản nháp
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/email_provider.dart';
@@ -24,6 +26,7 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
   bool _isEditing = false;
   String? _emailId;
   bool _isSending = false;
+  bool _isSaving = false;
   final _receiverController = TextEditingController();
 
   @override
@@ -55,17 +58,22 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
     super.dispose();
   }
 
-  void _saveEmail() async {
-    if (_formKey.currentState!.validate()) {
+  void _saveEmail({bool isDraft = false}) async {
+    if (_formKey.currentState!.validate() || isDraft) {
+      setState(() {
+        isDraft ? _isSaving = true : _isSending = true;
+      });
+
       final emailProvider = Provider.of<EmailProvider>(context, listen: false);
 
       final email = EmailModel(
         id: _isEditing ? _emailId! : DateTime.now().millisecondsSinceEpoch.toString(),
-        subject: _subjectController.text,
+        subject: _subjectController.text.isEmpty && isDraft ? "(No subject)" : _subjectController.text,
         content: _contentController.text,
         sender: _fromController.text,
-        receiver: _toController.text,
+        receiver: _toController.text.isEmpty && isDraft ? "(No recipient)" : _toController.text,
         timestamp: DateTime.now(),
+        isDraft: isDraft, // Đánh dấu là bản nháp nếu cần
       );
 
       try {
@@ -78,7 +86,9 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(_isEditing ? 'Email đã được cập nhật' : 'Email đã được lưu'),
+              content: Text(isDraft
+                  ? 'Email đã được lưu dưới dạng bản nháp'
+                  : (_isEditing ? 'Email đã được cập nhật' : 'Email đã được lưu')),
               backgroundColor: Colors.green,
             ),
           );
@@ -94,8 +104,19 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
             ),
           );
         }
+      } finally {
+        if (mounted) {
+          setState(() {
+            isDraft ? _isSaving = false : _isSending = false;
+          });
+        }
       }
     }
+  }
+
+  void _saveDraft() {
+    // Lưu email dưới dạng bản nháp
+    _saveEmail(isDraft: true);
   }
 
   void _sendEmail() async {
@@ -108,15 +129,8 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
         // Simulate sending email
         await Future.delayed(const Duration(seconds: 2));
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Email sent successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.of(context).pop();
-        }
+        // Lưu email đã gửi
+        _saveEmail(isDraft: false);
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -125,9 +139,6 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
               backgroundColor: Colors.red,
             ),
           );
-        }
-      } finally {
-        if (mounted) {
           setState(() {
             _isSending = false;
           });
@@ -143,14 +154,23 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.emailToEdit == null ? 'Compose Email' : 'Edit Email'),
+        title: Text(widget.emailToEdit == null
+            ? (widget.emailToEdit?.isDraft ?? false ? 'Edit Draft' : 'Compose Email')
+            : 'Edit Email'),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
         elevation: 0,
         actions: [
+          // Nút lưu bản nháp
+          IconButton(
+            icon: const Icon(Icons.save_outlined),
+            onPressed: _isSaving || _isSending ? null : _saveDraft,
+            tooltip: 'Save Draft',
+          ),
+          // Nút gửi email
           IconButton(
             icon: const Icon(Icons.send),
-            onPressed: _isSending ? null : _sendEmail,
+            onPressed: _isSending || _isSaving ? null : _sendEmail,
             tooltip: 'Send',
           ),
         ],
@@ -248,25 +268,54 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _isSending ? null : _sendEmail,
-                icon: _isSending
-                    ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              Row(
+                children: [
+                  // Nút lưu bản nháp
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _isSaving || _isSending ? null : _saveDraft,
+                      icon: _isSaving
+                          ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                          : const Icon(Icons.save_outlined),
+                      label: Text(_isSaving ? 'Saving...' : 'Save Draft'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey[700],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                    ),
                   ),
-                )
-                    : const Icon(Icons.send),
-                label: Text(_isSending ? 'Sending...' : 'Send Email'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: colorScheme.primary,
-                  foregroundColor: colorScheme.onPrimary,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  minimumSize: const Size(double.infinity, 48),
-                ),
+                  const SizedBox(width: 16),
+                  // Nút gửi email
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _isSending || _isSaving ? null : _sendEmail,
+                      icon: _isSending
+                          ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                          : const Icon(Icons.send),
+                      label: Text(_isSending ? 'Sending...' : 'Send Email'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: colorScheme.primary,
+                        foregroundColor: colorScheme.onPrimary,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
