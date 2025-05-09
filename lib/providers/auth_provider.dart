@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 import '../models/user.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -20,25 +21,33 @@ class AuthProvider extends ChangeNotifier {
 
   // Getters
   User? get currentUser => _currentUser;
+
   bool get isLoading => _isLoading;
+
   String get error => _error;
+
   bool get isAuthenticated => _isAuthenticated;
+
   String? get token => _token;
+
   String? get refreshToken => _refreshToken;
 
   // Base URL for auth API
-  static const String authApiBaseUrl = 'https://auth-api.dev.jarvis.cx/api/v1/auth';
+  static const String authApiBaseUrl =
+      'https://auth-api.dev.jarvis.cx/api/v1/auth';
 
   // Common headers for all requests
   static Map<String, String> get baseHeaders => {
-    'X-Stack-Access-Type': 'client',
-    'X-Stack-Project-Id': 'a914f06b-5e46-4966-8693-80e4b9f4f409',
-    'X-Stack-Publishable-Client-Key': 'pck_tqsy29b64a585km2g4wnpc57ypjprzzdch8xzpq0xhayr',
-    'Content-Type': 'application/json',
-  };
+        'X-Stack-Access-Type': 'client',
+        'X-Stack-Project-Id': 'a914f06b-5e46-4966-8693-80e4b9f4f409',
+        'X-Stack-Publishable-Client-Key':
+            'pck_tqsy29b64a585km2g4wnpc57ypjprzzdch8xzpq0xhayr',
+        'Content-Type': 'application/json',
+      };
 
   // Default verification callback URL
-  static const String defaultCallbackUrl = 'https://auth.dev.jarvis.cx/handler/email-verification?after_auth_return_to=%2Fauth%2Fsignin%3Fclient_id%3Djarvis_chat%26redirect%3Dhttps%253A%252F%252Fchat.dev.jarvis.cx%252Fauth%252Foauth%252Fsuccess';
+  static const String defaultCallbackUrl =
+      'https://auth.dev.jarvis.cx/handler/email-verification?after_auth_return_to=%2Fauth%2Fsignin%3Fclient_id%3Djarvis_chat%26redirect%3Dhttps%253A%252F%252Fchat.dev.jarvis.cx%252Fauth%252Foauth%252Fsuccess';
 
   // Constructor with auto login attempt
   AuthProvider() {
@@ -372,7 +381,8 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // Change password (keeping mock implementation for now)
-  Future<bool> changePassword(String currentPassword, String newPassword) async {
+  Future<bool> changePassword(
+      String currentPassword, String newPassword) async {
     try {
       _isLoading = true;
       _error = '';
@@ -421,6 +431,7 @@ class AuthProvider extends ChangeNotifier {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         _token = responseData['access_token'];
+        // _refreshToken = responseData['refresh_token'];
 
         // Update token expiry time (10 minutes from now)
         _tokenExpiryTime = DateTime.now().add(const Duration(minutes: 10));
@@ -428,6 +439,7 @@ class AuthProvider extends ChangeNotifier {
         // Update stored tokens
         final prefs = await SharedPreferences.getInstance();
         prefs.setString('access_token', _token!);
+        // prefs.setString('refresh_token', _refreshToken!);
         prefs.setString('token_expiry', _tokenExpiryTime!.toIso8601String());
 
         // Reset the timer for the next refresh
@@ -439,13 +451,15 @@ class AuthProvider extends ChangeNotifier {
       } else {
         // Token refresh failed - session might be expired
         debugPrint('Token refresh failed at ${DateTime.now()}');
-        await _handleSessionExpiration('Your session has expired. Please login again.');
+        await _handleSessionExpiration(
+            'Your session has expired. Please login again.');
         return false;
       }
     } catch (e) {
       // Handle network or other errors
       debugPrint('Token refresh error at ${DateTime.now()}: $e');
-      await _handleSessionExpiration('Failed to refresh authentication. Please login again.');
+      await _handleSessionExpiration(
+          'Failed to refresh authentication. Please login again.');
       return false;
     }
   }
@@ -456,7 +470,8 @@ class AuthProvider extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
 
-    if (!prefs.containsKey('access_token') || !prefs.containsKey('refresh_token')) {
+    if (!prefs.containsKey('access_token') ||
+        !prefs.containsKey('refresh_token')) {
       debugPrint('No stored tokens found');
       return false;
     }
@@ -479,7 +494,8 @@ class AuthProvider extends ChangeNotifier {
 
     if (email != null && name != null) {
       _currentUser = User(
-        id: '1', // We don't have the real ID stored
+        id: '1',
+        // We don't have the real ID stored
         name: name,
         email: email,
         photoUrl: '',
@@ -508,7 +524,7 @@ class AuthProvider extends ChangeNotifier {
     _cancelTokenRefreshTimer();
 
     // Set up timer to refresh token every 9 minutes
-    _tokenRefreshTimer = Timer.periodic(const Duration(minutes: 9), (timer) {
+    _tokenRefreshTimer = Timer.periodic(const Duration(minutes: 8), (timer) {
       debugPrint('Token refresh timer triggered at ${DateTime.now()}');
       if (_isAuthenticated && _refreshToken != null) {
         refreshAuthToken();
@@ -575,4 +591,3 @@ class AuthProvider extends ChangeNotifier {
     super.dispose();
   }
 }
-
