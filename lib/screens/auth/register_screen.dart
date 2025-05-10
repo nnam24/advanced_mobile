@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/animated_background.dart';
 import '../home_screen.dart';
@@ -76,6 +78,17 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
     });
   }
 
+  Future<void> _launchURL() async {
+    final Uri url = Uri.parse('https://privacyterms.io/view/c11HWAYZ-SCcv2SSV-zf8AP1/?fbclid=IwY2xjawKK9VBleHRuA2FlbQIxMABicmlkETFocGJlTzVFSmRmTTVLYkNWAR7Bx2-TZrGdEfBehi70pZPwwE7Pa1SL3aJkjhBa23Gr5JDaI5uTOkZs1lxcpA_aem_pU1wDNwuSRsmf6lWu4k7sQ');
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the link')),
+        );
+      }
+    }
+  }
+
   Future<void> _register() async {
     if (_formKey.currentState!.validate() && _agreeToTerms) {
       HapticFeedback.lightImpact();
@@ -95,11 +108,26 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
           MaterialPageRoute(builder: (context) => const HomeScreen()),
         );
       } else if (mounted) {
-        // Show error message
+        // Show error message based on error code
+        String errorMessage = authProvider.error;
+
+        // Customize error message based on error code
+        if (authProvider.errorCode == 'USER_EMAIL_ALREADY_EXISTS') {
+          errorMessage = 'This email is already registered. Please use a different email or try to login.';
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(authProvider.error ?? 'Registration failed. Please try again.'),
+            content: Text(errorMessage),
             behavior: SnackBarBehavior.floating,
+            backgroundColor: Theme.of(context).colorScheme.error,
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              },
+            ),
           ),
         );
       }
@@ -111,6 +139,24 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
         ),
       );
     }
+  }
+
+  // Thêm phương thức để hiển thị lỗi trong trường email
+  String? _getEmailErrorText(String? value, BuildContext context) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter your email';
+    }
+    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+      return 'Please enter a valid email';
+    }
+
+    // Check for API error
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.errorCode == 'USER_EMAIL_ALREADY_EXISTS') {
+      return 'This email is already registered';
+    }
+
+    return null;
   }
 
   @override
@@ -210,15 +256,19 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
+                                    // Thêm errorStyle để làm nổi bật lỗi
+                                    errorStyle: TextStyle(
+                                      color: Theme.of(context).colorScheme.error,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter your email';
+                                  validator: (value) => _getEmailErrorText(value, context),
+                                  // Thêm onChanged để xóa lỗi khi người dùng thay đổi email
+                                  onChanged: (value) {
+                                    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                                    if (authProvider.errorCode == 'USER_EMAIL_ALREADY_EXISTS') {
+                                      authProvider.clearError();
                                     }
-                                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                                      return 'Please enter a valid email';
-                                    }
-                                    return null;
                                   },
                                 ),
 
@@ -320,7 +370,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                                 color: Theme.of(context).colorScheme.primary,
                                                 fontWeight: FontWeight.bold,
                                               ),
-                                              recognizer: null, // Add GestureRecognizer in a real app
+                                              recognizer: TapGestureRecognizer()..onTap = _launchURL,
                                             ),
                                             const TextSpan(text: ' and '),
                                             TextSpan(
@@ -329,7 +379,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                                 color: Theme.of(context).colorScheme.primary,
                                                 fontWeight: FontWeight.bold,
                                               ),
-                                              recognizer: null, // Add GestureRecognizer in a real app
+                                              recognizer: TapGestureRecognizer()..onTap = _launchURL,
                                             ),
                                           ],
                                         ),
@@ -417,4 +467,3 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
     );
   }
 }
-

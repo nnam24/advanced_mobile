@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +22,8 @@ class AIBotService extends ChangeNotifier {
 
   // Map to store thread IDs for each bot
   final Map<String, String> _threadIds = {};
+  // Map to store conversation IDs for each bot
+  final Map<String, String> _conversationIds = {};
 
   // Base URL for the API
   static const String baseUrl = 'https://knowledge-api.dev.jarvis.cx';
@@ -33,11 +36,13 @@ class AIBotService extends ChangeNotifier {
   String get error => _error;
   bool get hasMore => _hasMore;
   Map<String, String> get threadIds => _threadIds;
+  Map<String, String> get conversationIds => _conversationIds;
 
   AIBotService() {
     // Load bots when service is initialized
     fetchBots();
     _loadThreadIds();
+    _loadConversationIds();
   }
 
   // Load thread IDs from SharedPreferences
@@ -68,17 +73,52 @@ class AIBotService extends ChangeNotifier {
     }
   }
 
+  // Load conversation IDs from SharedPreferences
+  Future<void> _loadConversationIds() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final conversationIdsJson = prefs.getString('conversation_ids');
+      if (conversationIdsJson != null) {
+        final Map<String, dynamic> loadedIds = json.decode(conversationIdsJson);
+        loadedIds.forEach((key, value) {
+          _conversationIds[key] = value.toString();
+        });
+        print('Loaded conversation IDs: $_conversationIds');
+      }
+    } catch (e) {
+      print('Error loading conversation IDs: $e');
+    }
+  }
+
+  // Save conversation IDs to SharedPreferences
+  Future<void> _saveConversationIds() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('conversation_ids', json.encode(_conversationIds));
+      print('Saved conversation IDs: $_conversationIds');
+    } catch (e) {
+      print('Error saving conversation IDs: $e');
+    }
+  }
+
   // Get headers for API requests
-  Future<Map<String, String>> _getHeaders() async {
+  Future<Map<String, String>> _getHeaders({bool forSSE = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('access_token') ?? '';
     final guid = prefs.getString('jarvis_guid') ?? '';
 
-    return {
+    final headers = {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $token',
       'x-jarvis-guid': guid,
     };
+
+    // Add SSE specific headers if needed
+    if (forSSE) {
+      headers['Accept'] = 'text/event-stream';
+    }
+
+    return headers;
   }
 
   // Fetch bots from the API
@@ -387,9 +427,11 @@ class AIBotService extends ChangeNotifier {
             _selectedBot = null;
           }
 
-          // Remove thread ID for this bot
+          // Remove thread ID and conversation ID for this bot
           _threadIds.remove(botId);
+          _conversationIds.remove(botId);
           _saveThreadIds();
+          _saveConversationIds();
 
           _error = '';
         } else {
@@ -520,74 +562,115 @@ class AIBotService extends ChangeNotifier {
     }
   }
 
-  // Ask a bot (for subsequent messages)
-  Future<Message> askAssistant(
-      String botId, String question, String threadId) async {
+  // Ask a bot using Stream for real-time updates
+  Future<Message> askAssistant(String botId, String question,
+      {String? threadId,
+      String? conversationId,
+      Function(String)? onChunkReceived}) async {
     try {
       _isLoading = true;
       notifyListeners();
 
       final uri = Uri.parse('$baseUrl/kb-core/v1/ai-assistant/$botId/ask');
-      final headers = await _getHeaders();
+      final headers = await _getHeaders(forSSE: true);
 
       // Prepare request body according to API documentation
       final requestBody = {
         'message': question,
-        'openAiThreadId': threadId,
-        'additionalInstruction': '', // Optional, can be empty
       };
 
+      // Add thread ID if provided (for subsequent messages)
+      if (threadId != null && threadId.isNotEmpty) {
+        requestBody['openAiThreadId'] = threadId;
+      }
+
+      // Add conversation ID if provided (for subsequent messages)
+      if (conversationId != null && conversationId.isNotEmpty) {
+        requestBody['conversationId'] = conversationId;
+      }
+
       print('Asking assistant with ID: $botId');
-      print('Using thread ID: $threadId');
+      print('Using thread ID: ${threadId ?? "none"}');
+      print('Using conversation ID: ${conversationId ?? "none"}');
       print('Request body: $requestBody');
 
-      final response = await http.post(
-        uri,
-        headers: headers,
-        body: json.encode(requestBody),
-      );
+      // Create a client that doesn't close automatically
+      final client = http.Client();
 
-      if (response.statusCode == 200) {
-        // Print the raw response for debugging
-        print('Raw response body: ${response.body}');
+      try {
+        // Send the request
+        final request = http.Request('POST', uri);
+        request.headers.addAll(headers);
+        request.body = json.encode(requestBody);
 
-        String responseText;
+        final streamedResponse = await client.send(request);
 
-        // Try to parse as JSON first
-        try {
-          final jsonData = json.decode(response.body);
-          print('Successfully parsed response as JSON');
-          responseText =
-              jsonData['response'] ?? 'No response from the assistant';
-        } catch (e) {
-          // If JSON parsing fails, use the raw response body as plain text
-          print('Response is not JSON, using as plain text: $e');
-          responseText = response.body;
+        if (streamedResponse.statusCode != 200) {
+          throw Exception(
+              'Failed to get response: ${streamedResponse.statusCode}');
         }
 
-        _isLoading = false;
-        notifyListeners();
+        // Process the stream
+        final stream = streamedResponse.stream.transform(utf8.decoder);
+
+        // Variables to track state
+        String fullContent = '';
+        String newConversationId = '';
+
+        // Process each line in the stream
+        await for (var line in stream.transform(const LineSplitter())) {
+          // Skip empty lines
+          if (line.trim().isEmpty) continue;
+
+          // Parse SSE format: "event: message\ndata: {...}"
+          if (line.startsWith('data:')) {
+            final dataStr = line.substring(5).trim();
+            if (dataStr.isEmpty) continue;
+
+            try {
+              final data = json.decode(dataStr);
+
+              // Extract content and conversation ID
+              final chunk = data['content'] as String? ?? '';
+              fullContent += chunk;
+
+              // Save conversation ID if available
+              if (data.containsKey('conversationId') &&
+                  data['conversationId'] != null &&
+                  data['conversationId'].toString().isNotEmpty) {
+                newConversationId = data['conversationId'].toString();
+
+                // Store the conversation ID for this bot
+                if (newConversationId.isNotEmpty) {
+                  _conversationIds[botId] = newConversationId;
+                  _saveConversationIds();
+                }
+              }
+
+              // We're not using the streaming callback anymore
+              // Just accumulate the full content
+              print('Received chunk: "$chunk"');
+            } catch (e) {
+              print('Error parsing SSE data: $e');
+              print('Raw data line: $line');
+            }
+          } else if (line.startsWith('event: message_end')) {
+            // Message is complete, break the loop
+            print('Message streaming completed');
+            break;
+          }
+        }
 
         return Message(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
-          content: responseText,
+          content: fullContent,
           type: MessageType.assistant,
           timestamp: DateTime.now(),
         );
-      } else {
-        _error = 'Failed to get response: ${response.statusCode}';
-        print(_error);
-        print('Response body: ${response.body}');
-
+      } finally {
+        client.close();
         _isLoading = false;
         notifyListeners();
-
-        return Message(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          content: 'Sorry, I encountered an error: $_error',
-          type: MessageType.assistant,
-          timestamp: DateTime.now(),
-        );
       }
     } catch (e) {
       _error = e.toString();
@@ -605,59 +688,22 @@ class AIBotService extends ChangeNotifier {
   }
 
   // Combined method to handle both first message and subsequent messages
-  Future<Message> sendMessage(String botId, String message) async {
+  Future<Message> sendMessage(String botId, String message,
+      {Function(String)? onChunkReceived}) async {
     try {
-      // Check if we already have a thread ID for this bot
       final existingThreadId = _threadIds[botId];
+      final existingConversationId = _conversationIds[botId];
 
       print('Thread ID for bot $botId: $existingThreadId');
+      print('Conversation ID for bot $botId: $existingConversationId');
 
-      if (existingThreadId == null || existingThreadId.isEmpty) {
-        // First message - create a thread
-        print(
-            'No existing thread found for bot $botId. Creating a new thread...');
-        final threadResponse = await createThreadForAssistant(botId, message);
-
-        if (threadResponse == null) {
-          // Failed to create thread
-          return Message(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            content:
-                'Sorry, I encountered an error creating a conversation thread.',
-            type: MessageType.assistant,
-            timestamp: DateTime.now(),
-          );
-        }
-
-        // Get the thread ID from the response
-        String threadId = threadResponse.openAiThreadId;
-
-        // If the thread ID is still empty, try to extract it directly from the raw response
-        if (threadId.isEmpty) {
-          print('ERROR: Thread ID is still empty after parsing!');
-          return Message(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            content:
-                'Sorry, I encountered an error creating a conversation thread. Thread ID is empty.',
-            type: MessageType.assistant,
-            timestamp: DateTime.now(),
-          );
-        }
-
-        // Store the thread ID immediately after creation to ensure it's available
-        _threadIds[botId] = threadId;
-        await _saveThreadIds();
-
-        print('Thread created successfully with ID: $threadId');
-        print('Thread IDs after creation: $_threadIds');
-
-        // Now we need to use the Ask Assistant API to get the response to the first message
-        return await askAssistant(botId, message, threadId);
-      } else {
-        // Subsequent message - use existing thread
-        print('Using existing thread $existingThreadId for bot $botId');
-        return await askAssistant(botId, message, existingThreadId);
-      }
+      // Get the full response at once
+      return await askAssistant(
+        botId,
+        message,
+        threadId: existingThreadId,
+        conversationId: existingConversationId,
+      );
     } catch (e) {
       _error = e.toString();
       print('Exception in sendMessage: $_error');
@@ -679,8 +725,7 @@ class AIBotService extends ChangeNotifier {
     int limit = 20,
     String orderField = 'createdAt',
     String order = 'DESC',
-    bool updateLoadingState =
-        true, // Add parameter to control loading state updates
+    bool updateLoadingState = true,
   }) async {
     try {
       // Only update loading state if explicitly requested
@@ -808,7 +853,7 @@ class AIBotService extends ChangeNotifier {
 
       final response = await http.post(uri, headers: headers);
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 204) {
         // Update local bot data
         final index = _bots.indexWhere((b) => b.id == botId);
         if (index != -1) {
@@ -860,7 +905,7 @@ class AIBotService extends ChangeNotifier {
 
       final response = await http.delete(uri, headers: headers);
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 204) {
         // Update local bot data
         final index = _bots.indexWhere((b) => b.id == botId);
         if (index != -1) {
@@ -936,7 +981,9 @@ class AIBotService extends ChangeNotifier {
   // Reset thread for a bot (for testing or when conversation needs to be restarted)
   void resetThread(String botId) {
     _threadIds.remove(botId);
+    _conversationIds.remove(botId);
     _saveThreadIds();
+    _saveConversationIds();
     notifyListeners();
   }
 }

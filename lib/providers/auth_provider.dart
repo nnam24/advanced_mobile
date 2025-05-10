@@ -3,12 +3,15 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 import '../models/user.dart';
 
 class AuthProvider extends ChangeNotifier {
   User? _currentUser;
   bool _isLoading = false;
+  // Thêm biến để lưu trữ mã lỗi
   String _error = '';
+  String? _errorCode;
   bool _isAuthenticated = false;
   String? _token;
   String? _refreshToken;
@@ -21,7 +24,9 @@ class AuthProvider extends ChangeNotifier {
   // Getters
   User? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
+  // Cập nhật getter cho error và thêm getter cho errorCode
   String get error => _error;
+  String? get errorCode => _errorCode;
   bool get isAuthenticated => _isAuthenticated;
   String? get token => _token;
   String? get refreshToken => _refreshToken;
@@ -118,10 +123,12 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // Register with email and password
+  // Trong phương thức register, cập nhật cách xử lý lỗi
   Future<bool> register(String name, String email, String password) async {
     try {
       _isLoading = true;
       _error = '';
+      _errorCode = null; // Reset error code
       notifyListeners();
 
       final response = await http.post(
@@ -144,13 +151,16 @@ class AuthProvider extends ChangeNotifier {
         // After successful registration, automatically sign in
         return await login(email, password);
       } else {
-        _error = responseData['message'] ?? 'Registration failed';
+        // Extract error code and message
+        _errorCode = responseData['code'] ?? 'UNKNOWN_ERROR';
+        _error = responseData['error'] ?? responseData['message'] ?? 'Registration failed';
         _isLoading = false;
         notifyListeners();
         return false;
       }
     } catch (e) {
       _error = e.toString();
+      _errorCode = 'UNKNOWN_ERROR';
       _isLoading = false;
       notifyListeners();
       return false;
@@ -403,6 +413,7 @@ class AuthProvider extends ChangeNotifier {
   // Refresh the authentication token
   Future<bool> refreshAuthToken() async {
     if (_refreshToken == null) {
+      debugPrint('No refresh token available');
       return false;
     }
 
@@ -421,6 +432,7 @@ class AuthProvider extends ChangeNotifier {
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         _token = responseData['access_token'];
+        // _refreshToken = responseData['refresh_token'];
 
         // Update token expiry time (10 minutes from now)
         _tokenExpiryTime = DateTime.now().add(const Duration(minutes: 10));
@@ -428,6 +440,7 @@ class AuthProvider extends ChangeNotifier {
         // Update stored tokens
         final prefs = await SharedPreferences.getInstance();
         prefs.setString('access_token', _token!);
+        // prefs.setString('refresh_token', _refreshToken!);
         prefs.setString('token_expiry', _tokenExpiryTime!.toIso8601String());
 
         // Reset the timer for the next refresh
@@ -438,7 +451,7 @@ class AuthProvider extends ChangeNotifier {
         return true;
       } else {
         // Token refresh failed - session might be expired
-        debugPrint('Token refresh failed at ${DateTime.now()}');
+        debugPrint('Token refresh failed at ${DateTime.now()}: ${response.statusCode} - ${response.body}');
         await _handleSessionExpiration('Your session has expired. Please login again.');
         return false;
       }
@@ -508,12 +521,21 @@ class AuthProvider extends ChangeNotifier {
     _cancelTokenRefreshTimer();
 
     // Set up timer to refresh token every 9 minutes
-    _tokenRefreshTimer = Timer.periodic(const Duration(minutes: 9), (timer) {
+    _tokenRefreshTimer = Timer.periodic(const Duration(minutes: 9), (timer) async {
       debugPrint('Token refresh timer triggered at ${DateTime.now()}');
       if (_isAuthenticated && _refreshToken != null) {
-        refreshAuthToken();
+        // Attempt to refresh the token
+        bool success = await refreshAuthToken();
+
+        // If refresh failed, the _handleSessionExpiration method has already been called
+        // and the user will be redirected to the login screen
+        if (!success) {
+          debugPrint('Token refresh failed, cancelling timer');
+          _cancelTokenRefreshTimer();
+        }
       } else {
         // If not authenticated or no refresh token, cancel the timer
+        debugPrint('Not authenticated or no refresh token, cancelling timer');
         _cancelTokenRefreshTimer();
       }
     });
@@ -549,6 +571,9 @@ class AuthProvider extends ChangeNotifier {
     await prefs.remove('access_token');
     await prefs.remove('refresh_token');
     await prefs.remove('token_expiry');
+    await prefs.remove('user_email');
+    await prefs.remove('user_name');
+    await prefs.remove('user_id');
 
     // Set error message
     _error = reason;
@@ -558,13 +583,18 @@ class AuthProvider extends ChangeNotifier {
 
     // Call session expired callback if set
     if (onSessionExpired != null) {
+      debugPrint('Calling onSessionExpired callback with reason: $reason');
       onSessionExpired!(reason);
+    } else {
+      debugPrint('WARNING: onSessionExpired callback is not set');
     }
   }
 
   // Clear error
+  // Cập nhật phương thức clearError để xóa cả error và errorCode
   void clearError() {
     _error = '';
+    _errorCode = null;
     notifyListeners();
   }
 
@@ -575,4 +605,3 @@ class AuthProvider extends ChangeNotifier {
     super.dispose();
   }
 }
-

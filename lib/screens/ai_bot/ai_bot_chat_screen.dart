@@ -25,6 +25,7 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
   bool _isLoading = false;
   bool _showScrollToBottom = false;
   bool _isFirstMessage = true;
+  bool _isProcessingMessage = false;
 
   @override
   void initState() {
@@ -85,16 +86,45 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
     }
   }
 
+  // Clean up empty messages
+  void _cleanupEmptyMessages() {
+    setState(() {
+      _messages.removeWhere((msg) =>
+          msg.content.trim().isEmpty &&
+          msg.id != 'welcome' &&
+          msg.id != 'welcome_reset');
+    });
+  }
+
   Future<void> _sendMessage() async {
     final message = _messageController.text.trim();
-    if (message.isEmpty) return;
+    if (message.isEmpty || _isProcessingMessage) return;
 
-    if (!mounted) return;
+    // Set processing flag to prevent multiple sends
     setState(() {
+      _isProcessingMessage = true;
       _isLoading = true;
+    });
+
+    // Create a unique ID for the user message
+    final userMessageId = 'user_${DateTime.now().millisecondsSinceEpoch}';
+
+    if (!mounted) {
+      setState(() {
+        _isProcessingMessage = false;
+        _isLoading = false;
+      });
+      return;
+    }
+
+    // Clean up any empty messages before adding new ones
+    _cleanupEmptyMessages();
+
+    // Add user message to the list
+    setState(() {
       _messages.add(
         Message(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          id: userMessageId,
           content: message,
           type: MessageType.user,
           timestamp: DateTime.now(),
@@ -112,37 +142,75 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
     try {
       final aiBotService = Provider.of<AIBotService>(context, listen: false);
 
-      // Use the combined method that handles both first and subsequent messages
+      // Get the full response at once without streaming
       final response = await aiBotService.sendMessage(widget.bot.id, message);
 
-      if (!mounted) return;
+      if (!mounted) {
+        setState(() {
+          _isProcessingMessage = false;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Make sure we have a non-empty response
+      final finalContent = response.content.isNotEmpty
+          ? response.content
+          : "I'm sorry, I couldn't generate a response.";
+
+      // Add the response as a new message
       setState(() {
-        _messages.add(response);
+        _messages.add(
+          Message(
+            id: 'assistant_${DateTime.now().millisecondsSinceEpoch}',
+            content: finalContent,
+            type: MessageType.assistant,
+            timestamp: DateTime.now(),
+          ),
+        );
+
         _isLoading = false;
+        _isProcessingMessage = false;
+
         // If this was the first message, now we're in subsequent message mode
         if (_isFirstMessage) {
           _isFirstMessage = false;
         }
       });
 
-      // Scroll to bottom after receiving response
+      // Clean up any empty messages
+      _cleanupEmptyMessages();
+
+      // Scroll to bottom after receiving full response
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scrollToBottom();
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        setState(() {
+          _isProcessingMessage = false;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Add error message
       setState(() {
-        _isLoading = false;
         _messages.add(
           Message(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            id: 'error_${DateTime.now().millisecondsSinceEpoch}',
             content:
                 'Sorry, there was an error processing your request: ${e.toString()}',
             type: MessageType.assistant,
             timestamp: DateTime.now(),
           ),
         );
+        _isProcessingMessage = false;
+        _isLoading = false;
       });
+
+      // Clean up any empty messages
+      _cleanupEmptyMessages();
 
       // Scroll to bottom to show error message
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -167,6 +235,10 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Filter out any empty messages for display
+    final displayMessages =
+        _messages.where((msg) => msg.content.trim().isNotEmpty).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -234,14 +306,14 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
               child: Stack(
                 children: [
                   const AnimatedBackground(),
-                  _messages.isEmpty
+                  displayMessages.isEmpty
                       ? _buildEmptyState()
                       : ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.all(16),
-                          itemCount: _messages.length,
+                          itemCount: displayMessages.length,
                           itemBuilder: (context, index) {
-                            final message = _messages[index];
+                            final message = displayMessages[index];
                             return MessageBubble(
                               key: ValueKey(message.id),
                               message: message,
@@ -290,9 +362,7 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
                     ),
                     const SizedBox(width: 16),
                     Text(
-                      _isFirstMessage
-                          ? 'Creating conversation...'
-                          : 'Thinking...',
+                      'Thinking...',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -357,14 +427,16 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
                         maxLines: null,
                         textInputAction: TextInputAction.newline,
                         keyboardType: TextInputType.multiline,
-                        enabled: !_isLoading,
+                        enabled: !_isLoading && !_isProcessingMessage,
                         onSubmitted: (_) => _sendMessage(),
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   FloatingActionButton(
-                    onPressed: _isLoading ? null : _sendMessage,
+                    onPressed: (_isLoading || _isProcessingMessage)
+                        ? null
+                        : _sendMessage,
                     mini: true,
                     elevation: 2,
                     highlightElevation: 4,
@@ -413,6 +485,7 @@ class _AIBotChatScreenState extends State<AIBotChatScreen> {
                   ),
                 );
                 _isFirstMessage = true;
+                _isProcessingMessage = false;
               });
 
               ScaffoldMessenger.of(context).showSnackBar(

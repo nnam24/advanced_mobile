@@ -6,9 +6,12 @@ import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/prompt_provider.dart';
 import '../models/prompt.dart';
+import '../providers/subscription_provider.dart';
 import '../widgets/animated_background.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_history_drawer.dart';
+import 'ad/earn_tokens_screen.dart';
+import 'email/email_screen.dart';
 import 'profile/profile_screen.dart';
 import 'auth/login_screen.dart';
 import 'ai_bot/ai_bot_list_screen.dart';
@@ -53,6 +56,12 @@ class _HomeScreenState extends State<HomeScreen>
     // Check authentication status
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final subscriptionProvider =
+          Provider.of<SubscriptionProvider>(context, listen: false);
+
+      // Fetch current subscription information
+      subscriptionProvider.fetchCurrentSubscription();
+
       if (!authProvider.isAuthenticated) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -787,6 +796,7 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final chatProvider = Provider.of<ChatProvider>(context);
+    final subscriptionProvider = Provider.of<SubscriptionProvider>(context);
     final currentConversation = chatProvider.currentConversation;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final mediaQuery = MediaQuery.of(context);
@@ -863,6 +873,11 @@ class _HomeScreenState extends State<HomeScreen>
                 chatProvider.createNewConversation();
               } else if (value == 'clear') {
                 chatProvider.reduceTokenUsage();
+              } else if (value == 'email') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const EmailScreen()),
+                );
               } else if (value == 'logout') {
                 // Show loading indicator
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -934,6 +949,16 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
               const PopupMenuItem(
+                value: 'email',
+                child: Row(
+                  children: [
+                    Icon(Icons.email, size: 20),
+                    SizedBox(width: 8),
+                    Text('Email AI'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
                 value: 'logout',
                 child: Row(
                   children: [
@@ -946,13 +971,13 @@ class _HomeScreenState extends State<HomeScreen>
             ],
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Chat'),
-            Tab(text: 'Email'),
-          ],
-        ),
+        // bottom: TabBar(
+        //   controller: _tabController,
+        //   tabs: const [
+        //     Tab(text: 'Chat'),
+        //     Tab(text: 'Email'),
+        //   ],
+        // ),
       ),
       body: TabBarView(
         controller: _tabController,
@@ -971,6 +996,7 @@ class _HomeScreenState extends State<HomeScreen>
                   Column(
                     children: [
                       // Token indicator
+                      // Replace the existing token indicator with this updated version
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 4),
@@ -978,37 +1004,74 @@ class _HomeScreenState extends State<HomeScreen>
                             .colorScheme
                             .surface
                             .withOpacity(0.8),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.token,
-                              size: 16,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: LinearProgressIndicator(
-                                value: chatProvider.tokenAvailabilityPercentage,
-                                backgroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .surfaceVariant,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  chatProvider.tokenAvailabilityPercentage > 0.2
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Colors.red,
+                        child: Consumer<SubscriptionProvider>(
+                          builder: (context, subscriptionProvider, child) {
+                            return Row(
+                              children: [
+                                Icon(
+                                  Icons.token,
+                                  size: 16,
+                                  color: Theme.of(context).colorScheme.primary,
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${chatProvider.availableTokens} / ${chatProvider.tokenLimit}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          ],
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: subscriptionProvider.isLoadingTokens
+                                      ? LinearProgressIndicator(
+                                          backgroundColor: Theme.of(context)
+                                              .colorScheme
+                                              .surfaceVariant,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                            Theme.of(context)
+                                                .colorScheme
+                                                .primary,
+                                          ),
+                                        )
+                                      : LinearProgressIndicator(
+                                          value: subscriptionProvider
+                                              .tokenAvailabilityPercentage,
+                                          backgroundColor: Theme.of(context)
+                                              .colorScheme
+                                              .surfaceVariant,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                            subscriptionProvider
+                                                        .tokenAvailabilityPercentage >
+                                                    0.2
+                                                ? Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                                : Colors.red,
+                                          ),
+                                        ),
+                                ),
+                                const SizedBox(width: 8),
+                                // subscriptionProvider.isLoadingTokens
+                                //     ? SizedBox(
+                                //   width: 16,
+                                //   height: 16,
+                                //   child: CircularProgressIndicator(
+                                //     strokeWidth: 2,
+                                //     valueColor: AlwaysStoppedAnimation<Color>(
+                                //       Theme.of(context).colorScheme.primary,
+                                //     ),
+                                //   ),
+                                // )
+                                //     :
+                                Text(
+                                  subscriptionProvider.hasUnlimitedTokens
+                                      ? 'Unlimited'
+                                      : '${subscriptionProvider.availableTokens} / ${subscriptionProvider.totalTokens}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color:
+                                        Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ),
 
@@ -1194,7 +1257,9 @@ class _HomeScreenState extends State<HomeScreen>
                                     controller: _messageController,
                                     focusNode: _messageFocusNode,
                                     decoration: InputDecoration(
-                                      hintText: chatProvider.hasTokens
+                                      hintText: (chatProvider.hasTokens ||
+                                              subscriptionProvider
+                                                  .hasUnlimitedTokens)
                                           ? 'Type a message...'
                                           : 'Out of tokens',
                                       hintStyle: const TextStyle(fontSize: 14),
@@ -1225,7 +1290,8 @@ class _HomeScreenState extends State<HomeScreen>
                                     minLines: 1,
                                     textInputAction: TextInputAction.newline,
                                     keyboardType: TextInputType.multiline,
-                                    enabled: chatProvider.hasTokens,
+                                    enabled: chatProvider.hasTokens ||
+                                        subscriptionProvider.hasUnlimitedTokens,
                                   ),
                                 ),
                               ),
@@ -1234,7 +1300,8 @@ class _HomeScreenState extends State<HomeScreen>
                                 icon: const Icon(Icons.send, size: 20),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
-                                onPressed: chatProvider.hasTokens
+                                onPressed: (chatProvider.hasTokens ||
+                                        subscriptionProvider.hasUnlimitedTokens)
                                     ? _sendMessage
                                     : null,
                                 color: Theme.of(context).colorScheme.primary,
@@ -1250,8 +1317,8 @@ class _HomeScreenState extends State<HomeScreen>
             ),
           ),
 
-          // Email Tab
-          const EmailComposeScreen(),
+          // // Email Tab
+          // const EmailComposeScreen(),
         ],
       ),
     );
@@ -1360,7 +1427,10 @@ class _HomeScreenState extends State<HomeScreen>
             title: const Text('Email Composer'),
             onTap: () {
               Navigator.pop(context);
-              _tabController.animateTo(1);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const EmailScreen()),
+              );
             },
           ),
           ListTile(
@@ -1441,6 +1511,21 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 );
               });
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.token),
+            title: const Text('Earn Free Tokens'),
+            onTap: () {
+              // Close the drawer
+              Navigator.pop(context);
+
+              // Navigate to the Earn Tokens screen
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const EarnTokensScreen()),
+              );
             },
           ),
         ],

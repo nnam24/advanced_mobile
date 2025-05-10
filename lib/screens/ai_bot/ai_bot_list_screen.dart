@@ -238,8 +238,6 @@ class _AIBotListScreenState extends State<AIBotListScreen> {
   }
 
   Widget _buildBotCard(BuildContext context, AIBot bot) {
-    final knowledgeCount = bot.knowledgeIds.length;
-
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 0,
@@ -325,12 +323,6 @@ class _AIBotListScreenState extends State<AIBotListScreen> {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  _buildInfoChip(
-                    context,
-                    Icons.description_outlined,
-                    '$knowledgeCount knowledge sources',
-                  ),
-                  const SizedBox(width: 8),
                   _buildInfoChip(
                     context,
                     Icons.calendar_today_outlined,

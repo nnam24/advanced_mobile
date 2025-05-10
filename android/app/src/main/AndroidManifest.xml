@@ -32,18 +32,18 @@
         android:enableOnBackInvokedCallback="true"
         >
 
+
     <!-- Add this meta-data tag for AdMob with a valid test ID -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713"/>
-            
+            android:value="ca-app-pub-5917361125307707~7798342779"/>
+
         <!-- Optional: Disable the MobileAdsInitProvider -->
         <provider
             android:name="com.google.android.gms.ads.MobileAdsInitProvider"
-            android:authorities="${applicationId}.mobileadsinitprovider"
+            android:authorities="com.example.mobileadsinitprovider"
             android:exported="false"
             tools:node="remove" />
-            
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -64,6 +64,14 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Add URL handling intent filter -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
@@ -71,6 +79,20 @@
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
+    <!-- Add queries for URL launching -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="http" />
+        </intent>
+    </queries>
+
     <meta-data
         android:name="io.flutter.embedding.android.EnableImpeller"
         android:value="false" />

@@ -3,12 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:jarvis_ai_application/providers/subscription_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/conversation.dart';
 import '../models/message.dart';
-import '../models/chat_history.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
+
 
 class ChatProvider extends ChangeNotifier {
   List<Conversation> _conversations = [];
@@ -28,6 +28,7 @@ class ChatProvider extends ChangeNotifier {
   final String _baseUrl = 'https://api.dev.jarvis.cx';
   final String _apiPath = '/api/v1/ai-chat/messages';
   final String _conversationsPath = '/api/v1/ai-chat/conversations';
+  final SubscriptionProvider _subscriptionProvider;
 
   // Token management
   final int _maxTokenLimit = 1000; // Maximum token limit
@@ -43,10 +44,10 @@ class ChatProvider extends ChangeNotifier {
   bool get isFetchingConversations => _isFetchingConversations;
   bool get hasMoreConversations => _hasMoreConversations;
   int get tokenLimit => _maxTokenLimit;
-  int get availableTokens => _availableTokens;
+  int get availableTokens => _subscriptionProvider.availableTokens;
   int get totalTokensUsed => _totalTokensUsed;
   double get tokenAvailabilityPercentage => _availableTokens / _maxTokenLimit;
-  bool get hasTokens => _availableTokens > 0;
+  bool get hasTokens => availableTokens > 0;
 
   bool isLoadingMessages(String conversationId) =>
       _isFetchingMessages[conversationId] ?? false;
@@ -79,7 +80,7 @@ class ChatProvider extends ChangeNotifier {
 
   List<String> get availableAgents => _availableAgents;
 
-  ChatProvider() {
+  ChatProvider(this._subscriptionProvider) {
     _initializeData();
     //_startTokenDecayTimer();
   }
@@ -176,28 +177,28 @@ class ChatProvider extends ChangeNotifier {
     _totalTokensUsed = totalTokens;
 
     // Update available tokens
-    _availableTokens = _maxTokenLimit -
-        (_totalTokensUsed ~/ 2); // Start with some tokens already used
+    // _availableTokens = _maxTokenLimit -
+    //     (_totalTokensUsed ~/ 2); // Start with some tokens already used
     if (_availableTokens < 0) _availableTokens = 0;
   }
 
   // Start timer to simulate token decay over time
   void _startTokenDecayTimer() {
-    // Decay tokens every 30 seconds
-    _tokenDecayTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      // Decrease available tokens by a small amount (1-3 tokens)
-      final decayAmount = (DateTime.now().second % 3) + 1;
-
-      if (_availableTokens > decayAmount) {
-        _availableTokens -= decayAmount;
-        _totalTokensUsed += decayAmount;
-        notifyListeners();
-      } else if (_availableTokens > 0) {
-        _totalTokensUsed += _availableTokens;
-        _availableTokens = 0;
-        notifyListeners();
-      }
-    });
+    // // Decay tokens every 30 seconds
+    // _tokenDecayTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+    //   // Decrease available tokens by a small amount (1-3 tokens)
+    //   final decayAmount = (DateTime.now().second % 3) + 1;
+    //
+    //   if (_availableTokens > decayAmount) {
+    //     _availableTokens -= decayAmount;
+    //     _totalTokensUsed += decayAmount;
+    //     notifyListeners();
+    //   } else if (_availableTokens > 0) {
+    //     _totalTokensUsed += _availableTokens;
+    //     _availableTokens = 0;
+    //     notifyListeners();
+    //   }
+    // });
   }
 
   // Fetch conversations from API
@@ -522,12 +523,12 @@ class ChatProvider extends ChangeNotifier {
     if (content.trim().isEmpty) return;
 
     // Check if we have enough tokens
-    final estimatedUserTokens = _estimateTokenCount(content);
-    if (estimatedUserTokens > _availableTokens) {
-      // Not enough tokens
-      notifyListeners();
-      return;
-    }
+    // final estimatedUserTokens = _estimateTokenCount(content);
+    // if (estimatedUserTokens > _availableTokens) {
+    //   // Not enough tokens
+    //   notifyListeners();
+    //   return;
+    // }
 
     if (_currentConversation == null) {
       createNewConversation();
@@ -539,7 +540,7 @@ class ChatProvider extends ChangeNotifier {
       content: content,
       type: MessageType.user,
       timestamp: DateTime.now(),
-      tokenCount: estimatedUserTokens,
+      tokenCount: 0,
     );
 
     // Add user message to conversation
@@ -562,8 +563,10 @@ class ChatProvider extends ChangeNotifier {
     }
 
     // Deduct user message tokens
-    _availableTokens -= estimatedUserTokens;
-    _totalTokensUsed += estimatedUserTokens;
+    // _availableTokens -= 1;
+    // _totalTokensUsed += 1;
+
+    _subscriptionProvider.fetchTokenUsage();
 
     notifyListeners();
 
@@ -696,7 +699,7 @@ class ChatProvider extends ChangeNotifier {
         }
 
         // Update available tokens based on API response
-        _availableTokens = remainingUsage;
+        // _availableTokens = remainingUsage;
       } else {
         // Handle error response
         throw Exception(
@@ -777,8 +780,8 @@ class ChatProvider extends ChangeNotifier {
 
     // Deduct tokens for image message
     final imageTokens = _estimateTokenCount(caption) + 20;
-    _availableTokens -= imageTokens;
-    _totalTokensUsed += imageTokens;
+    // _availableTokens -= imageTokens;
+    // _totalTokensUsed += imageTokens;
 
     notifyListeners();
 
@@ -852,8 +855,8 @@ class ChatProvider extends ChangeNotifier {
       }
 
       // Deduct tokens
-      _availableTokens -= assistantTokens;
-      _totalTokensUsed += assistantTokens;
+      // _availableTokens -= 0;
+      // _totalTokensUsed += 0;
     } catch (e) {
       print('Error processing image: $e');
 
@@ -993,9 +996,9 @@ class ChatProvider extends ChangeNotifier {
       }
 
       // Recover tokens (but don't reduce total tokens used)
-      _availableTokens += tokensToRecover;
+      // _availableTokens += 0;
       if (_availableTokens > _maxTokenLimit) {
-        _availableTokens = _maxTokenLimit;
+        //_availableTokens = _maxTokenLimit;
       }
 
       notifyListeners();
@@ -1004,16 +1007,16 @@ class ChatProvider extends ChangeNotifier {
 
   // Add tokens (could be used for purchasing more tokens)
   void addTokens(int amount) {
-    _availableTokens += amount;
+    // _availableTokens += amount;
     if (_availableTokens > _maxTokenLimit) {
-      _availableTokens = _maxTokenLimit;
+      // _availableTokens = _maxTokenLimit;
     }
     notifyListeners();
   }
 
   // Reset tokens to maximum (for testing purposes)
   void resetTokens() {
-    _availableTokens = _maxTokenLimit;
+    // _availableTokens = _maxTokenLimit;
     notifyListeners();
   }
 
