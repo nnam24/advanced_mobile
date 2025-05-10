@@ -7,6 +7,7 @@ class EmailModel {
   final DateTime timestamp;
   final bool isRead;
   final List<String> labels;
+  final bool isDraft; // Thêm trường này
 
   EmailModel({
     required this.id,
@@ -17,6 +18,7 @@ class EmailModel {
     required this.timestamp,
     this.isRead = false,
     this.labels = const [],
+    this.isDraft = false, // Giá trị mặc định là false
   });
 
   factory EmailModel.fromJson(Map<String, dynamic> json) {
@@ -26,13 +28,14 @@ class EmailModel {
       content: json['content'] ?? '',
       sender: json['sender'] ?? '',
       receiver: json['receiver'] ?? '',
-      timestamp: json['timestamp'] != null 
-          ? DateTime.parse(json['timestamp']) 
+      timestamp: json['timestamp'] != null
+          ? DateTime.parse(json['timestamp'])
           : DateTime.now(),
       isRead: json['isRead'] ?? false,
-      labels: json['labels'] != null 
-          ? List<String>.from(json['labels']) 
+      labels: json['labels'] != null
+          ? List<String>.from(json['labels'])
           : [],
+      isDraft: json['isDraft'] ?? false,
     );
   }
 
@@ -46,6 +49,7 @@ class EmailModel {
       'timestamp': timestamp.toIso8601String(),
       'isRead': isRead,
       'labels': labels,
+      'isDraft': isDraft,
     };
   }
 
@@ -58,6 +62,7 @@ class EmailModel {
     DateTime? timestamp,
     bool? isRead,
     List<String>? labels,
+    bool? isDraft,
   }) {
     return EmailModel(
       id: id ?? this.id,
@@ -68,6 +73,7 @@ class EmailModel {
       timestamp: timestamp ?? this.timestamp,
       isRead: isRead ?? this.isRead,
       labels: labels ?? this.labels,
+      isDraft: isDraft ?? this.isDraft,
     );
   }
 }

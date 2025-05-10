@@ -5,6 +5,7 @@ import '../../providers/email_provider.dart';
 import '../../providers/subscription_provider.dart';
 import '../../widgets/ai_action_button.dart';
 import '../../models/email_model.dart';
+import '../email/email_compose_screen.dart';
 
 class EmailDetailScreen extends StatefulWidget {
   final Function(EmailModel) onEditEmail;
@@ -289,13 +290,35 @@ class _EmailDetailScreenState extends State<EmailDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        email.subject,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onSurface,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              email.subject,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                          if (email.isDraft == true)
+                            Container(
+                              margin: const EdgeInsets.only(left: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[300],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'Draft',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -696,6 +719,27 @@ class _EmailDetailScreenState extends State<EmailDetailScreen> {
                             ),
                           ),
                       ],
+                    ),
+                  ),
+                if (email.isDraft == true)
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EmailComposeScreen(emailToEdit: email),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.edit),
+                      label: const Text('Edit Draft'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: colorScheme.primary,
+                        foregroundColor: colorScheme.onPrimary,
+                        minimumSize: const Size(double.infinity, 48),
+                      ),
                     ),
                   ),
               ],

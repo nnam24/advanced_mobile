@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/cupertino.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/email_model.dart';
@@ -296,7 +297,7 @@ class EmailService {
         },
         body: jsonEncode({
           'mainIdea': mainIdea,
-          'action': 'Reply to this email',
+          'action': action,
           'email': emailContent,
           'metadata': {
             'context': [],
@@ -332,6 +333,9 @@ class EmailService {
       final response = await _executeWithRetry(apiCall);
 
       if (response.statusCode == 200) {
+        debugPrint('Response Body: ${response.body}'); // Debugging the response body
+        debugPrint('Response Body: ${jsonDecode(response.body)}'); // Debugging the response body
+
         return jsonDecode(response.body);
       } else {
         throw Exception('Failed to generate email: ${response.statusCode}');
