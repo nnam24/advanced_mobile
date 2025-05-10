@@ -4,7 +4,7 @@ import 'package:jarvis_ai_application/providers/email_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart'; // Add this import
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:flutter/foundation.dart';
 
 import 'models/conversation.dart';
@@ -15,11 +15,10 @@ import 'providers/auth_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/subscription_provider.dart';
 import 'providers/prompt_provider.dart';
-import 'providers/ad_provider.dart'; // Add this import
+import 'providers/ad_provider.dart';
 import 'services/ai_bot_service.dart';
 import 'services/prompt_service.dart';
-import 'services/prompt_service.dart'; // Added import for PromptService
-import 'services/bot_integration_service.dart'; // Added import for BotIntegrationService
+import 'services/bot_integration_service.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -27,7 +26,6 @@ import 'utils/memory_management.dart';
 
 // Optimize the main function to improve app startup performance
 void main() async {
-  // Changed to async
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -53,10 +51,10 @@ void main() async {
   // Create instances that require parameters
   final promptService = PromptService();
   final promptProvider = PromptProvider(promptService: promptService);
-  final adProvider = AdProvider(); // Create AdProvider instance
+  final adProvider = AdProvider();
   final subscriptionProvider = SubscriptionProvider();
-  final botIntegrationService =
-      BotIntegrationService(); // Create BotIntegrationService instance
+  final botIntegrationService = BotIntegrationService();
+  final aiBotService = AIBotService();
 
   // Run the app with optimized providers
   runApp(
@@ -66,19 +64,23 @@ void main() async {
         ChangeNotifierProvider(create: (context) => ThemeProvider()),
         // Lazy load providers that aren't needed immediately
         ChangeNotifierProvider.value(value: subscriptionProvider),
+        ChangeNotifierProvider.value(value: aiBotService),
 
-        ChangeNotifierProxyProvider<SubscriptionProvider, ChatProvider>(
-          create: (context) => ChatProvider(subscriptionProvider),
-          update: (context, subscriptionProvider, previous) =>
-              previous ?? ChatProvider(subscriptionProvider),
+        // Updated to use ChangeNotifierProxyProvider2 to inject both dependencies
+        ChangeNotifierProxyProvider2<SubscriptionProvider, AIBotService,
+            ChatProvider>(
+          create: (context) => ChatProvider(
+            subscriptionProvider,
+            aiBotService,
+          ),
+          update: (context, subscriptionProvider, aiBotService, previous) =>
+              previous ?? ChatProvider(subscriptionProvider, aiBotService),
         ),
-        ChangeNotifierProvider.value(value: AIBotService()),
+
         ChangeNotifierProvider.value(value: promptProvider),
-        ChangeNotifierProvider.value(value: adProvider), // Add AdProvider
-        ChangeNotifierProvider(create: (_) => EmailProvider()), // Add this line
-        ChangeNotifierProvider.value(
-            value:
-                botIntegrationService), // Add BotIntegrationService to providers
+        ChangeNotifierProvider.value(value: adProvider),
+        ChangeNotifierProvider(create: (_) => EmailProvider()),
+        ChangeNotifierProvider.value(value: botIntegrationService),
       ],
       child: const JarvisApp(),
     ),
