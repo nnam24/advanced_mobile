@@ -27,7 +27,6 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
   String? _emailId;
   bool _isSending = false;
   bool _isSaving = false;
-  final _receiverController = TextEditingController();
 
   @override
   void initState() {
@@ -41,10 +40,11 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
       _contentController.text = widget.emailToEdit!.content;
       _toController.text = widget.emailToEdit!.receiver;
       _fromController.text = widget.emailToEdit!.sender;
-      _receiverController.text = widget.emailToEdit!.receiver;
     } else {
-      // Set default sender
-      _fromController.text = 'Nguyên Thái Lê <lnthai21@clc.fitus.edu.vn>';
+      // Chỉ đặt giá trị mặc định nếu người dùng chưa nhập gì
+      if (_fromController.text.isEmpty) {
+        _fromController.text = 'Nguyên Thái Lê <lnthai21@clc.fitus.edu.vn>';
+      }
     }
   }
 
@@ -54,7 +54,6 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
     _contentController.dispose();
     _toController.dispose();
     _fromController.dispose();
-    _receiverController.dispose();
     super.dispose();
   }
 
@@ -191,7 +190,6 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
                   filled: true,
                   fillColor: colorScheme.surface,
                 ),
-                readOnly: !_isEditing, // Chỉ cho phép chỉnh sửa nếu đang edit
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Vui lòng nhập người gửi';
@@ -201,7 +199,7 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
               ),
               const SizedBox(height: 16),
               TextFormField(
-                controller: _receiverController,
+                controller: _toController,
                 decoration: InputDecoration(
                   labelText: 'To',
                   hintText: 'Enter recipient email',
