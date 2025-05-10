@@ -2,19 +2,108 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import 'auth_service.dart';
+
 class EmailSuggestionService extends ChangeNotifier {
-  final String _baseUrl = 'https://api.jarvis.cx/api/v1';
-  final String _authToken = 'eyJhbGciOiJFUzI1NiIsImtpZCI6InFsWUdfYXNMRTI0VSJ9.eyJzdWIiOiIyNTk4Yjk3YS02MWU0LTQ0Y2UtYWJjNC0xMjQ5N2RhZjA2Y2MiLCJicmFuY2hJZCI6Im1haW4iLCJpc3MiOiJodHRwczovL2FjY2Vzcy10b2tlbi5qd3Qtc2lnbmF0dXJlLnN0YWNrLWF1dGguY29tIiwiaWF0IjoxNzQzNzg3MzY5LCJhdWQiOiI0NWExZTJmZC03N2VlLTQ4NzItOWZiNy05ODdiOGMxMTk2MzMiLCJleHAiOjE3NTE1NjMzNjl9.oqYM5aMMiuF-Cg9RpcbmvAEw9a3SRpckKr2NyxQ58aMM-yBRzR9y3ogaeMJHzeXtVNtacuFsMd04roDlGGtwKQ';
+  final String _baseUrl = 'https://dev-api.jarvis.cx/api/v1';
   final String _guidHeader = 'baf60c1e-c61b-496d-ad92-f5aeeadf4def';
-  
+
+  final AuthService _authService = AuthService();
+
   bool _isLoading = false;
   String _error = '';
   int _remainingUsage = 50; // Default value
-  
+
   bool get isLoading => _isLoading;
   String get error => _error;
   int get remainingUsage => _remainingUsage;
-  
+
+  // Helper method to get the current token
+  Future<String?> _getToken() async {
+    return await _authService.getAccessToken();
+  }
+
+  // Helper method to refresh the token
+  Future<String?> _refreshToken() async {
+    try {
+      await _authService.refreshToken();
+      return await _authService.getAccessToken();
+    } catch (e) {
+      _error = 'Failed to refresh token: $e';
+      return null;
+    }
+  }
+
+  // Helper method to make authenticated API calls with token refresh
+  Future<http.Response?> _makeAuthenticatedRequest({
+    required String endpoint,
+    required String method,
+    Map<String, dynamic>? body,
+    int retryCount = 0,
+  }) async {
+    if (retryCount > 1) {
+      _error = 'Too many retry attempts';
+      return null;
+    }
+
+    try {
+      final token = await _getToken();
+      if (token == null) {
+        _error = 'No authentication token available';
+        return null;
+      }
+
+      final Uri uri = Uri.parse('$_baseUrl/$endpoint');
+      final Map<String, String> headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+        'x-jarvis-guid': _guidHeader,
+      };
+
+      http.Response response;
+
+      if (method == 'GET') {
+        response = await http.get(uri, headers: headers)
+            .timeout(const Duration(seconds: 30), onTimeout: () {
+          throw Exception('Request timed out');
+        });
+      } else if (method == 'POST') {
+        response = await http.post(
+            uri,
+            headers: headers,
+            body: body != null ? jsonEncode(body) : null
+        ).timeout(const Duration(seconds: 30), onTimeout: () {
+          throw Exception('Request timed out');
+        });
+      } else {
+        throw Exception('Unsupported HTTP method: $method');
+      }
+
+      // Handle 401 Unauthorized error
+      if (response.statusCode == 401) {
+        debugPrint('Token expired, refreshing...');
+        final newToken = await _refreshToken();
+        if (newToken != null) {
+          return _makeAuthenticatedRequest(
+            endpoint: endpoint,
+            method: method,
+            body: body,
+            retryCount: retryCount + 1,
+          );
+        } else {
+          _error = 'Failed to refresh authentication token';
+          return null;
+        }
+      }
+
+      return response;
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('API request error: $_error');
+      return null;
+    }
+  }
+
   // Tạo phản hồi email đầy đủ
   Future<Map<String, dynamic>> generateEmailResponse({
     required String emailContent,
@@ -28,15 +117,11 @@ class EmailSuggestionService extends ChangeNotifier {
     try {
       _isLoading = true;
       notifyListeners();
-      
-      final response = await http.post(
-        Uri.parse('$_baseUrl/ai-email'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_authToken',
-          'x-jarvis-guid': _guidHeader,
-        },
-        body: jsonEncode({
+
+      final response = await _makeAuthenticatedRequest(
+        endpoint: 'ai-email',
+        method: 'POST',
+        body: {
           'mainIdea': mainIdea,
           'action': action,
           'email': emailContent,
@@ -52,9 +137,13 @@ class EmailSuggestionService extends ChangeNotifier {
             },
             'language': language
           }
-        }),
+        },
       );
-      
+
+      if (response == null) {
+        throw Exception('Failed to make API request');
+      }
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _remainingUsage = data['remainingUsage'] ?? _remainingUsage;
@@ -62,16 +151,17 @@ class EmailSuggestionService extends ChangeNotifier {
         notifyListeners();
         return data;
       } else {
-        throw Exception('Failed to generate email: ${response.statusCode}');
+        throw Exception('Failed to generate email: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
-      rethrow;
+      debugPrint('Generate email error: $_error');
+      return {'error': _error};
     }
   }
-  
+
   // Lấy ý tưởng trả lời cho email
   Future<List<String>> getReplyIdeas({
     required String emailContent,
@@ -83,15 +173,11 @@ class EmailSuggestionService extends ChangeNotifier {
     try {
       _isLoading = true;
       notifyListeners();
-      
-      final response = await http.post(
-        Uri.parse('$_baseUrl/ai-email/reply-ideas'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_authToken',
-          'x-jarvis-guid': _guidHeader,
-        },
-        body: jsonEncode({
+
+      final response = await _makeAuthenticatedRequest(
+        endpoint: 'ai-email/reply-ideas',
+        method: 'POST',
+        body: {
           'action': 'Suggest 3 ideas for this email',
           'email': emailContent,
           'metadata': {
@@ -101,25 +187,30 @@ class EmailSuggestionService extends ChangeNotifier {
             'receiver': receiver,
             'language': language
           }
-        }),
+        },
       );
-      
+
+      if (response == null) {
+        throw Exception('Failed to make API request');
+      }
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _isLoading = false;
         notifyListeners();
         return List<String>.from(data['ideas'] ?? []);
       } else {
-        throw Exception('Failed to get reply ideas: ${response.statusCode}');
+        throw Exception('Failed to get reply ideas: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
-      rethrow;
+      debugPrint('Get reply ideas error: $_error');
+      return [];
     }
   }
-  
+
   // Helper method để tạo email với ý định cụ thể
   Future<Map<String, dynamic>> generateEmailWithIntent({
     required String emailContent,
@@ -131,7 +222,7 @@ class EmailSuggestionService extends ChangeNotifier {
   }) async {
     String mainIdea = '';
     String action = '';
-    
+
     switch (intent) {
       case 'thanks':
         mainIdea = 'Xin cảm ơn thông tin đã cung cấp.';
@@ -161,7 +252,7 @@ class EmailSuggestionService extends ChangeNotifier {
         mainIdea = 'Phản hồi email.';
         action = 'Hãy viết email phản hồi một các đầy đủ';
     }
-    
+
     return generateEmailResponse(
       emailContent: emailContent,
       mainIdea: mainIdea,
@@ -172,7 +263,7 @@ class EmailSuggestionService extends ChangeNotifier {
       language: language,
     );
   }
-  
+
   void clearError() {
     _error = '';
     notifyListeners();
