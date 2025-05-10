@@ -444,13 +444,6 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  Text(
-                    '${conversation.messages.length} messages',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
                 ],
               ),
             ],

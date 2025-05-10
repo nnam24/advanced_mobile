@@ -66,11 +66,17 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
       final emailProvider = Provider.of<EmailProvider>(context, listen: false);
 
       final email = EmailModel(
-        id: _isEditing ? _emailId! : DateTime.now().millisecondsSinceEpoch.toString(),
-        subject: _subjectController.text.isEmpty && isDraft ? "(No subject)" : _subjectController.text,
+        id: _isEditing
+            ? _emailId!
+            : DateTime.now().millisecondsSinceEpoch.toString(),
+        subject: _subjectController.text.isEmpty && isDraft
+            ? "(No subject)"
+            : _subjectController.text,
         content: _contentController.text,
         sender: _fromController.text,
-        receiver: _toController.text.isEmpty && isDraft ? "(No recipient)" : _toController.text,
+        receiver: _toController.text.isEmpty && isDraft
+            ? "(No recipient)"
+            : _toController.text,
         timestamp: DateTime.now(),
         isDraft: isDraft, // Đánh dấu là bản nháp nếu cần
       );
@@ -87,7 +93,9 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
             SnackBar(
               content: Text(isDraft
                   ? 'Email đã được lưu dưới dạng bản nháp'
-                  : (_isEditing ? 'Email đã được cập nhật' : 'Email đã được lưu')),
+                  : (_isEditing
+                      ? 'Email đã được cập nhật'
+                      : 'Email đã được lưu')),
               backgroundColor: Colors.green,
             ),
           );
@@ -154,7 +162,9 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.emailToEdit == null
-            ? (widget.emailToEdit?.isDraft ?? false ? 'Edit Draft' : 'Compose Email')
+            ? (widget.emailToEdit?.isDraft ?? false
+                ? 'Edit Draft'
+                : 'Compose Email')
             : 'Edit Email'),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
@@ -214,7 +224,8 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
                     return 'Recipient email is required';
                   }
                   // Kiểm tra định dạng email
-                  final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                  final emailRegex =
+                      RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
                   if (!emailRegex.hasMatch(value)) {
                     return 'Please enter a valid email';
                   }
@@ -274,19 +285,21 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
                       onPressed: _isSaving || _isSending ? null : _saveDraft,
                       icon: _isSaving
                           ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
                           : const Icon(Icons.save_outlined),
                       label: Text(_isSaving ? 'Saving...' : 'Save Draft'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.grey[700],
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
                       ),
                     ),
                   ),
@@ -297,19 +310,21 @@ class _EmailComposeScreenState extends State<EmailComposeScreen> {
                       onPressed: _isSending || _isSaving ? null : _sendEmail,
                       icon: _isSending
                           ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
                           : const Icon(Icons.send),
                       label: Text(_isSending ? 'Sending...' : 'Send Email'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: colorScheme.primary,
                         foregroundColor: colorScheme.onPrimary,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
                       ),
                     ),
                   ),
