@@ -7,9 +7,8 @@ import 'package:jarvis_ai_application/providers/subscription_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/conversation.dart';
 import '../models/message.dart';
-import '../models/ai_bot.dart';
-import '../services/ai_bot_service.dart';
 import 'package:path_provider/path_provider.dart';
+
 
 class ChatProvider extends ChangeNotifier {
   List<Conversation> _conversations = [];
@@ -25,17 +24,11 @@ class ChatProvider extends ChangeNotifier {
   Map<String, bool> _hasMoreMessages = {};
   Map<String, bool> _isFetchingMessages = {};
 
-  // Custom bot selection
-  String? _selectedBotId;
-  String? _currentConversationId;
-  final Map<String, String> _botIds = {};
-
   // API configuration
   final String _baseUrl = 'https://api.dev.jarvis.cx';
   final String _apiPath = '/api/v1/ai-chat/messages';
   final String _conversationsPath = '/api/v1/ai-chat/conversations';
   final SubscriptionProvider _subscriptionProvider;
-  final AIBotService _botService; // Add this line
 
   // Token management
   final int _maxTokenLimit = 1000; // Maximum token limit
@@ -55,8 +48,6 @@ class ChatProvider extends ChangeNotifier {
   int get totalTokensUsed => _totalTokensUsed;
   double get tokenAvailabilityPercentage => _availableTokens / _maxTokenLimit;
   bool get hasTokens => availableTokens > 0;
-  String? get selectedBotId => _selectedBotId;
-  String? get currentThreadId => _currentConversationId;
 
   bool isLoadingMessages(String conversationId) =>
       _isFetchingMessages[conversationId] ?? false;
@@ -64,26 +55,32 @@ class ChatProvider extends ChangeNotifier {
   bool hasMoreMessages(String conversationId) =>
       _hasMoreMessages[conversationId] ?? false;
 
-  // Standard models
-  final List<String> _standardModels = [
+  final List<String> _availableAgents = [
     'Claude 3.5 Sonnet',
     'Claude 3 Opus',
     'GPT-4o',
     'Gemini Pro',
   ];
 
-  // Combined list of standard models and custom bots
-  List<String> _availableAgents = [
-    'Claude 3.5 Sonnet',
-    'Claude 3 Opus',
-    'GPT-4o',
-    'Gemini Pro',
-  ];
+  // Map UI-friendly model names to API model IDs
+  String _getModelId(String modelName) {
+    switch (modelName) {
+      case 'Claude 3.5 Sonnet':
+        return 'claude-3-5-sonnet-20240620';
+      case 'Claude 3 Opus':
+        return 'claude-3-haiku-20240307';
+      case 'GPT-4o':
+        return 'gpt-4o';
+      case 'Gemini Pro':
+        return 'gemini-1.5-flash-latest';
+      default:
+        return 'gemini-1.5-flash-latest'; // Default model
+    }
+  }
 
   List<String> get availableAgents => _availableAgents;
 
-  ChatProvider(this._subscriptionProvider, this._botService) {
-    // Add _botService parameter
+  ChatProvider(this._subscriptionProvider) {
     _initializeData();
     //_startTokenDecayTimer();
   }
@@ -98,62 +95,11 @@ class ChatProvider extends ChangeNotifier {
     // Try to fetch conversations from API first
     try {
       await fetchConversations();
-      // Fetch custom bots
-      await fetchCustomBots();
     } catch (e) {
       print('Error fetching conversations: $e');
       // If API fetch fails, use sample data
       _loadSampleConversations();
     }
-  }
-
-  // Fetch custom bots and update available agents
-  Future<void> fetchCustomBots() async {
-    try {
-      // Use the injected botService instead of creating a new instance
-      await _botService.fetchBots();
-
-      // Clear existing custom bots
-      _botIds.clear();
-
-      // Add custom bots to the available agents
-      for (final bot in _botService.bots) {
-        _botIds[bot.name] = bot.id;
-      }
-
-      // Update available agents list
-      _availableAgents = [..._standardModels];
-      _availableAgents.addAll(_botIds.keys);
-
-      notifyListeners();
-    } catch (e) {
-      print('Error fetching custom bots: $e');
-    }
-  }
-
-  // Select a bot by ID
-  void selectBot(AIBot bot) {
-    _selectedBotId = bot.id;
-    _selectedAgent = bot.name;
-    _currentConversationId = null; // Reset conversation ID when changing bots
-
-    // Update bot ID map
-    _botIds[bot.name] = bot.id;
-
-    // Make sure the bot is in the available agents list
-    if (!_availableAgents.contains(bot.name)) {
-      _availableAgents.add(bot.name);
-    }
-
-    notifyListeners();
-  }
-
-  // Clear selected bot
-  void clearSelectedBot() {
-    _selectedBotId = null;
-    _currentConversationId = null;
-    _selectedAgent = _standardModels.first; // Reset to default model
-    notifyListeners();
   }
 
   // Load sample conversations as fallback
@@ -253,28 +199,6 @@ class ChatProvider extends ChangeNotifier {
     //     notifyListeners();
     //   }
     // });
-  }
-
-  // Map UI-friendly model names to API model IDs
-  String _getModelId(String modelName) {
-    // If this is a custom bot, return its ID
-    if (_botIds.containsKey(modelName)) {
-      return _botIds[modelName]!;
-    }
-
-    // Otherwise, map standard models to their IDs
-    switch (modelName) {
-      case 'Claude 3.5 Sonnet':
-        return 'claude-3-5-sonnet-20240620';
-      case 'Claude 3 Opus':
-        return 'claude-3-haiku-20240307';
-      case 'GPT-4o':
-        return 'gpt-4o';
-      case 'Gemini Pro':
-        return 'gemini-1.5-flash-latest';
-      default:
-        return 'gemini-1.5-flash-latest'; // Default model
-    }
   }
 
   // Fetch conversations from API
@@ -555,7 +479,6 @@ class ChatProvider extends ChangeNotifier {
     final newConversation = Conversation.empty();
     _conversations.insert(0, newConversation);
     _currentConversation = newConversation;
-    _currentConversationId = null; // Reset conversation ID for API
     notifyListeners();
   }
 
@@ -564,7 +487,6 @@ class ChatProvider extends ChangeNotifier {
       (conversation) => conversation.id == conversationId,
     );
     _currentConversation = selectedConversation;
-    _currentConversationId = null; // Reset conversation ID when switching
 
     // If the conversation doesn't have messages yet, fetch them
     if (selectedConversation.messages.isEmpty) {
@@ -574,24 +496,9 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Update the changeAgent method to handle bot selection
   void changeAgent(String agent) {
     if (_availableAgents.contains(agent)) {
       _selectedAgent = agent;
-
-      // Set the selectedBotId if this is a custom bot
-      if (_botIds.containsKey(agent)) {
-        _selectedBotId = _botIds[agent];
-        print('Selected custom bot: $agent with ID: $_selectedBotId');
-      } else {
-        // If it's a standard model, clear the selectedBotId
-        _selectedBotId = null;
-        print('Selected standard model: $agent');
-      }
-
-      // Don't reset conversation ID when changing agents
-      // _currentConversationId = null; <- Remove this line
-
       if (_currentConversation != null) {
         _currentConversation = _currentConversation!.copyWith(agentName: agent);
         final index = _conversations.indexWhere(
@@ -601,7 +508,6 @@ class ChatProvider extends ChangeNotifier {
           _conversations[index] = _currentConversation!;
         }
       }
-
       notifyListeners();
     }
   }
@@ -669,16 +575,137 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // If a bot is selected, use the bot API
-      if (_selectedBotId != null) {
-        await sendMessageToBot(content);
+      // Get authentication token
+      final authToken = await _getAuthToken();
+      if (authToken == null) {
+        throw Exception('Authentication token not found');
+      }
+
+      // Prepare conversation history for API
+      List<Map<String, dynamic>> messageHistory = [];
+
+      // Only include previous messages if this is not a new conversation
+      if (_currentConversation!.messages.length > 1) {
+        for (final message in _currentConversation!.messages) {
+          if (message.id != userMessage.id) {
+            // Skip the message we just added
+            messageHistory.add({
+              'role': message.type == MessageType.user ? 'user' : 'assistant',
+              'content': message.content,
+            });
+          }
+        }
+      }
+
+      // Check if this is a new conversation or an existing one
+      final bool isNewConversation =
+          _isNewConversation(_currentConversation!.id);
+
+      // Prepare request body according to API documentation
+      Map<String, dynamic> requestBody;
+
+      if (isNewConversation) {
+        // First request - create a new conversation
+        requestBody = {
+          'content': content,
+          'assistant': {
+            'id': _getModelId(_selectedAgent),
+            'model': 'dify',
+            'files': [],
+            'metadata': {
+              'conversation': {
+                'messages': messageHistory,
+              },
+            },
+          },
+        };
       } else {
-        // Otherwise use the standard model API
-        await _sendMessageToStandardModel(content);
+        // Subsequent request - use existing conversation ID
+        requestBody = {
+          'content': content,
+          'files': [],
+          'metadata': {
+            'conversation': {
+              'id': _currentConversation!.id,
+              'messages': [] // Empty messages array as per the example
+            }
+          },
+          'assistant': {
+            'id': _getModelId(_selectedAgent),
+            'model': 'dify',
+            'name': _selectedAgent
+          }
+        };
+      }
+
+      // Log the request for debugging
+      print('Sending request to API: ${jsonEncode(requestBody)}');
+
+      // Make API request
+      final response = await http.post(
+        Uri.parse('$_baseUrl$_apiPath'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+        body: jsonEncode(requestBody),
+      );
+
+      // Log the response for debugging
+      print('API response status: ${response.statusCode}');
+      print('API response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        // Parse response
+        final responseData = jsonDecode(response.body);
+        final assistantMessage = responseData['message'] as String;
+        final conversationId = responseData['conversationId'] as String;
+        final remainingUsage = responseData['remainingUsage'] as int;
+
+        // Update conversation ID if this is a new conversation
+        if (isNewConversation) {
+          _currentConversation = _currentConversation!.copyWith(
+            id: conversationId,
+          );
+
+          // Update the conversation in the list
+          if (index != -1) {
+            _conversations[index] = _currentConversation!;
+          }
+        }
+
+        // Create assistant message
+        final message = Message(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          content: assistantMessage,
+          type: MessageType.assistant,
+          timestamp: DateTime.now(),
+          tokenCount: _estimateTokenCount(assistantMessage),
+        );
+
+        // Add assistant message to conversation
+        final updatedMessagesWithResponse = [
+          ..._currentConversation!.messages,
+          message,
+        ];
+
+        _currentConversation = _currentConversation!.copyWith(
+          messages: updatedMessagesWithResponse,
+          updatedAt: DateTime.now(),
+        );
+
+        if (index != -1) {
+          _conversations[index] = _currentConversation!;
+        }
+
+        // Update available tokens based on API response
+        // _availableTokens = remainingUsage;
+      } else {
+        // Handle error response
+        throw Exception(
+            'Failed to send message: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      print('Error sending message: $e');
-
       // Add error message to conversation
       final errorMessage = Message(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -702,301 +729,11 @@ class ChatProvider extends ChangeNotifier {
       if (index != -1) {
         _conversations[index] = _currentConversation!;
       }
+
+      print('Error sending message: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
-    }
-  }
-
-  // Replace the entire sendMessageToBot method with this simplified version:
-
-  Future<void> sendMessageToBot(String content) async {
-    if (_selectedBotId == null) return;
-
-    final url = Uri.parse('$_baseUrl/api/v1/ai-chat/messages');
-    final token = await _getAuthToken();
-
-    if (token == null) {
-      throw Exception('Authentication token not found');
-    }
-
-    // Prepare conversation history for the API
-    List<Map<String, dynamic>> conversationHistory = [];
-
-    if (_currentConversation != null) {
-      // Only include messages from the current conversation
-      for (final message in _currentConversation!.messages) {
-        // Skip the last message (which is the one we just added)
-        if (message.id != _currentConversation!.messages.last.id) {
-          // Include the assistant information for each message
-          final Map<String, dynamic> messageData = {
-            'role': message.type == MessageType.user ? 'user' : 'assistant',
-            'content': message.content,
-            'files': [], // Add files if needed
-          };
-
-          // Add assistant info to the message
-          if (!_isNewConversation(_currentConversation!.id)) {
-            messageData['assistant'] = {
-              'model': 'knowledge-base',
-              'name': _selectedAgent,
-              'id': _selectedBotId,
-            };
-          }
-
-          conversationHistory.add(messageData);
-        }
-      }
-    }
-
-    // Prepare request body
-    final Map<String, dynamic> requestBody = {
-      'content': content,
-      'files': [],
-      'metadata': {
-        'conversation': _currentConversationId != null &&
-                !_isNewConversation(_currentConversation!.id)
-            ? {
-                'id': _currentConversationId ?? _currentConversation!.id,
-                'messages': conversationHistory,
-              }
-            : {
-                'messages': conversationHistory,
-              },
-      },
-      'assistant': {
-        'model': 'knowledge-base',
-        'name': _selectedAgent,
-        'id': _selectedBotId,
-      },
-    };
-
-    try {
-      // Make API request
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode(requestBody),
-      );
-
-      // Log the response for debugging
-      print('API response status: ${response.statusCode}');
-      print('API response body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        // Parse response
-        final responseData = jsonDecode(response.body);
-        final assistantMessage = responseData['message'] as String;
-        final conversationId = responseData['conversationId'] as String;
-        final remainingUsage = responseData['remainingUsage'] as int?;
-
-        // Save the conversation ID for future requests
-        _currentConversationId = conversationId;
-
-        // Create assistant message
-        final message = Message(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          content: assistantMessage,
-          type: MessageType.assistant,
-          timestamp: DateTime.now(),
-          tokenCount: _estimateTokenCount(assistantMessage),
-        );
-
-        // Add assistant message to conversation
-        final updatedMessagesWithResponse = [
-          ..._currentConversation!.messages,
-          message,
-        ];
-
-        // Update conversation with new ID and messages
-        _currentConversation = _currentConversation!.copyWith(
-          id: conversationId,
-          messages: updatedMessagesWithResponse,
-          updatedAt: DateTime.now(),
-        );
-
-        // Update the conversation in the list
-        final index = _conversations.indexWhere(
-          (conversation) =>
-              conversation.id == _currentConversation!.id ||
-              (conversation.id.startsWith('temp_') &&
-                  _currentConversation!.id == conversationId),
-        );
-
-        if (index != -1) {
-          _conversations[index] = _currentConversation!;
-        }
-
-        // Update available tokens if provided
-        if (remainingUsage != null) {
-          _availableTokens = remainingUsage;
-        }
-      } else {
-        // Handle error response
-        throw Exception(
-            'Failed to send message: ${response.statusCode} ${response.body}');
-      }
-    } catch (e) {
-      print('Error in sendMessageToBot: $e');
-      rethrow;
-    }
-  }
-
-  // Send message to standard model API
-  Future<void> _sendMessageToStandardModel(String content) async {
-    // Get authentication token
-    final authToken = await _getAuthToken();
-    if (authToken == null) {
-      throw Exception('Authentication token not found');
-    }
-
-    // Prepare conversation history for API
-    List<Map<String, dynamic>> messageHistory = [];
-
-    // Only include previous messages if this is not a new conversation
-    if (_currentConversation!.messages.length > 1) {
-      for (final message in _currentConversation!.messages) {
-        if (message.id != _currentConversation!.messages.last.id) {
-          // Skip the message we just added
-          final Map<String, dynamic> messageData = {
-            'role': message.type == MessageType.user ? 'user' : 'assistant',
-            'content': message.content,
-          };
-
-          // Add assistant info to the message if we have a conversation ID
-          if (_currentConversationId != null) {
-            messageData['assistant'] = {
-              'id': _getModelId(_selectedAgent),
-              'model': 'dify',
-              'name': _selectedAgent
-            };
-          }
-
-          messageHistory.add(messageData);
-        }
-      }
-    }
-
-    // Check if this is a new conversation or an existing one
-    final bool isNewConversation = _isNewConversation(_currentConversation!.id);
-
-    // Prepare request body according to API documentation
-    Map<String, dynamic> requestBody;
-
-    if (isNewConversation && _currentConversationId == null) {
-      // First request - create a new conversation
-      requestBody = {
-        'content': content,
-        'assistant': {
-          'id': _getModelId(_selectedAgent),
-          'model': 'dify',
-          'files': [],
-          'metadata': {
-            'conversation': {
-              'messages': messageHistory,
-            },
-          },
-        },
-      };
-    } else {
-      // Subsequent request - use existing conversation ID
-      requestBody = {
-        'content': content,
-        'files': [],
-        'metadata': {
-          'conversation': {
-            'id': _currentConversationId ?? _currentConversation!.id,
-            'messages': messageHistory // Include message history
-          }
-        },
-        'assistant': {
-          'id': _getModelId(_selectedAgent),
-          'model': 'dify',
-          'name': _selectedAgent
-        }
-      };
-    }
-
-    // Log the request for debugging
-    print('Sending request to API: ${jsonEncode(requestBody)}');
-
-    // Make API request
-    final response = await http.post(
-      Uri.parse('$_baseUrl$_apiPath'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $authToken',
-      },
-      body: jsonEncode(requestBody),
-    );
-
-    // Log the response for debugging
-    print('API response status: ${response.statusCode}');
-    print('API response body: ${response.body}');
-
-    if (response.statusCode == 200) {
-      // Parse response
-      final responseData = jsonDecode(response.body);
-      final assistantMessage = responseData['message'] as String;
-      final conversationId = responseData['conversationId'] as String;
-      final remainingUsage = responseData['remainingUsage'] as int;
-
-      // Save the conversation ID for future requests
-      _currentConversationId = conversationId;
-
-      // Update conversation ID if this is a new conversation
-      if (isNewConversation) {
-        _currentConversation = _currentConversation!.copyWith(
-          id: conversationId,
-        );
-
-        // Update the conversation in the list
-        final index = _conversations.indexWhere(
-          (conversation) => conversation.id == _currentConversation!.id,
-        );
-
-        if (index != -1) {
-          _conversations[index] = _currentConversation!;
-        }
-      }
-
-      // Create assistant message
-      final message = Message(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        content: assistantMessage,
-        type: MessageType.assistant,
-        timestamp: DateTime.now(),
-        tokenCount: _estimateTokenCount(assistantMessage),
-      );
-
-      // Add assistant message to conversation
-      final updatedMessagesWithResponse = [
-        ..._currentConversation!.messages,
-        message,
-      ];
-
-      _currentConversation = _currentConversation!.copyWith(
-        messages: updatedMessagesWithResponse,
-        updatedAt: DateTime.now(),
-      );
-
-      final index = _conversations.indexWhere(
-        (conversation) => conversation.id == _currentConversation!.id,
-      );
-
-      if (index != -1) {
-        _conversations[index] = _currentConversation!;
-      }
-
-      // Update available tokens based on API response
-      // _availableTokens = remainingUsage;
-    } else {
-      // Handle error response
-      throw Exception(
-          'Failed to send message: ${response.statusCode} ${response.body}');
     }
   }
 
@@ -1295,12 +1032,6 @@ class ChatProvider extends ChangeNotifier {
 
   // Get AI model capabilities description
   String getAIModelCapabilities(String modelName) {
-    // If this is a custom bot, return a custom description
-    if (_botIds.containsKey(modelName)) {
-      return 'Custom AI bot trained on specific knowledge and capabilities.';
-    }
-
-    // Otherwise, return standard model descriptions
     switch (modelName) {
       case 'Claude 3.5 Sonnet':
         return 'Claude 3.5 Sonnet is optimized for speed and efficiency while maintaining high-quality responses. Best for everyday tasks, content creation, and quick answers.';
