@@ -10,8 +10,6 @@ import '../providers/subscription_provider.dart';
 import '../widgets/animated_background.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_history_drawer.dart';
-import '../models/ai_bot.dart';
-import '../services/ai_bot_service.dart';
 import 'ad/earn_tokens_screen.dart';
 import 'email/email_screen.dart';
 import 'profile/profile_screen.dart';
@@ -60,7 +58,6 @@ class _HomeScreenState extends State<HomeScreen>
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final subscriptionProvider =
           Provider.of<SubscriptionProvider>(context, listen: false);
-      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
 
       // Fetch current subscription information
       subscriptionProvider.fetchCurrentSubscription();
@@ -77,9 +74,6 @@ class _HomeScreenState extends State<HomeScreen>
       if (promptProvider.prompts.isEmpty) {
         promptProvider.fetchPrompts(isPublic: true, refresh: true);
       }
-
-      // Fetch custom bots
-      chatProvider.fetchCustomBots();
     });
 
     // Set up session expiration handler
@@ -798,118 +792,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // Add a method to show bot selector
-  void _showBotSelector() {
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-
-    // Refresh the bot list
-    chatProvider.fetchCustomBots();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        minChildSize: 0.5,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (context, scrollController) {
-          return _buildBotSelector(scrollController);
-        },
-      ),
-    );
-  }
-
-  // Add a method to build the bot selector UI
-  Widget _buildBotSelector(ScrollController scrollController) {
-    return Consumer<ChatProvider>(
-      builder: (context, chatProvider, _) {
-        final agents = chatProvider.availableAgents;
-
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                children: [
-                  const Text(
-                    'Select an AI Model',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.refresh),
-                    tooltip: 'Refresh Bots',
-                    onPressed: () {
-                      chatProvider.fetchCustomBots();
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                itemCount: agents.length,
-                itemBuilder: (context, index) {
-                  final botName = agents[index];
-                  final isSelected = botName == chatProvider.selectedAgent;
-                  final isCustomBot =
-                      chatProvider.selectedBotId != null && isSelected;
-
-                  return ListTile(
-                    title: Text(
-                      botName,
-                      style: TextStyle(
-                        fontWeight:
-                            isSelected ? FontWeight.bold : FontWeight.normal,
-                      ),
-                    ),
-                    subtitle: isCustomBot ? const Text('Custom AI Bot') : null,
-                    leading: CircleAvatar(
-                      backgroundColor:
-                          Theme.of(context).colorScheme.primaryContainer,
-                      child: Icon(
-                        isCustomBot ? Icons.smart_toy : Icons.auto_awesome,
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                    trailing: isSelected
-                        ? Icon(
-                            Icons.check_circle,
-                            color: Theme.of(context).colorScheme.primary,
-                          )
-                        : null,
-                    onTap: () {
-                      chatProvider.changeAgent(botName);
-                      Navigator.pop(context);
-
-                      // Show a snackbar to confirm selection
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Selected model: $botName'),
-                          behavior: SnackBarBehavior.floating,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -946,11 +828,24 @@ class _HomeScreenState extends State<HomeScreen>
               );
             },
           ),
-          // AI Bot selector button
-          IconButton(
-            icon: const Icon(Icons.smart_toy),
-            tooltip: 'Select AI Model',
-            onPressed: _showBotSelector,
+          // AI Model selector as a dropdown in the AppBar
+          DropdownButton<String>(
+            value: chatProvider.selectedAgent,
+            underline: Container(),
+            icon: const Icon(Icons.arrow_drop_down),
+            dropdownColor: Theme.of(context).colorScheme.surface,
+            onChanged: (String? newValue) {
+              if (newValue != null) {
+                chatProvider.changeAgent(newValue);
+              }
+            },
+            items: chatProvider.availableAgents
+                .map<DropdownMenuItem<String>>((String value) {
+              return DropdownMenuItem<String>(
+                value: value,
+                child: Text(value, style: const TextStyle(fontSize: 14)),
+              );
+            }).toList(),
           ),
           IconButton(
             icon: const Icon(Icons.email),
@@ -1151,6 +1046,18 @@ class _HomeScreenState extends State<HomeScreen>
                                         ),
                                 ),
                                 const SizedBox(width: 8),
+                                // subscriptionProvider.isLoadingTokens
+                                //     ? SizedBox(
+                                //   width: 16,
+                                //   height: 16,
+                                //   child: CircularProgressIndicator(
+                                //     strokeWidth: 2,
+                                //     valueColor: AlwaysStoppedAnimation<Color>(
+                                //       Theme.of(context).colorScheme.primary,
+                                //     ),
+                                //   ),
+                                // )
+                                //     :
                                 Text(
                                   subscriptionProvider.hasUnlimitedTokens
                                       ? 'Unlimited'
@@ -1195,21 +1102,6 @@ class _HomeScreenState extends State<HomeScreen>
                                 ),
                               ),
                             ),
-                            if (chatProvider.selectedBotId != null)
-                              IconButton(
-                                icon: const Icon(Icons.close, size: 18),
-                                tooltip: 'Clear Bot Selection',
-                                onPressed: () {
-                                  chatProvider.clearSelectedBot();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Bot selection cleared'),
-                                      behavior: SnackBarBehavior.floating,
-                                      duration: Duration(seconds: 2),
-                                    ),
-                                  );
-                                },
-                              ),
                             IconButton(
                               icon: const Icon(Icons.info_outline, size: 18),
                               tooltip: 'Model Info',
