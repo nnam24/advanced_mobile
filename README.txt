@@ -51,6 +51,14 @@
    for Milestone 2. It showcases the authentication, ai-chat, prompt functionalities and 
    management features.
 
+🔷 YOUTUBE DEMO VIDEO (MILESTONE 3) 🔷
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📌 Link: https://drive.google.com/file/d/1HAMFUazJ2_wxUNo_GREOFVEcrwkDPOko/view?usp=sharing
+
+📝 Description:
+   This video demonstrates the completion of the Jarvis AI application
+   for Milestone 3.
+
 
 ✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨
 
