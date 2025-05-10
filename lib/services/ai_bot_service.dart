@@ -411,7 +411,7 @@ class AIBotService extends ChangeNotifier {
       print('Deleting bot with ID: $botId');
       final response = await http.delete(uri, headers: headers);
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 204) {
         // Parse the response according to API documentation
         final jsonData = json.decode(response.body);
         final success = jsonData is bool ? jsonData : true;
