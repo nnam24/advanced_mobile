@@ -21,6 +21,10 @@
     <a href="https://youtu.be/JFa60vW_n-s" target="_blank">
       <img src="https://img.shields.io/badge/YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="YouTube Demo" width="200" style="transform: scale(1.2); transition: transform 0.3s ease;">
     </a>
+    <h1> Demo milestone 3: </h1>
+    <a href="https://drive.google.com/file/d/1HAMFUazJ2_wxUNo_GREOFVEcrwkDPOko/view?usp=sharing" target="_blank">
+      <img src="https://img.shields.io/badge/Google%20Drive-4285F4?style=for-the-badge&logo=googledrive&logoColor=white" alt="Google Drive Demo" width="200" style="transform: scale(1.2); transition: transform 0.3s ease;">
+    </a>
     <p style="color: white; margin-top: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.2);"><strong>👆 Click to watch our full demonstration on YouTube! 👆</strong></p>
   </div>
   
